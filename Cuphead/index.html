@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#140c10">
+  <title>Летунов и Денис — цирк и школа</title>
+  <meta name="description" content="Мультяшная карта городка, босс Летунов в цирке, босс Денис в школе и магазин баффов.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Летунов">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-scene="menu">
+  <div id="stage">
+    <canvas id="game" width="1280" height="720" aria-label="Городок Летунова: цирк, школа и магазин"></canvas>
+
+    <div class="top-buttons">
+      <button id="mapBackButton" class="round-btn map-back-btn" type="button" aria-label="В меню" title="В меню (Esc)">
+        <span class="back-glyph">‹</span>
+      </button>
+      <button id="pauseButton" class="round-btn" type="button" aria-label="Пауза" title="Пауза (Esc)">
+        <span class="pause-glyph">II</span>
+      </button>
+      <button id="muteButton" class="round-btn" type="button" aria-label="Выключить звук" title="Звук (M)">
+        <span class="note-glyph">♪</span>
+      </button>
+    </div>
+
+    <div id="touchControls" class="touch-controls" aria-hidden="true">
+      <div class="touch-group touch-move">
+        <button class="pad-btn" type="button" data-action="left" aria-label="Влево">
+          <span class="pad-arrow">◀</span>
+        </button>
+        <button class="pad-btn" type="button" data-action="right" aria-label="Вправо">
+          <span class="pad-arrow">▶</span>
+        </button>
+      </div>
+      <div class="touch-group touch-actions">
+        <button class="action-btn dash" type="button" data-action="dash" aria-label="Рывок">
+          <span class="action-icon">»</span>
+          <span class="action-label">РЫВОК</span>
+        </button>
+        <button class="action-btn jump" type="button" data-action="jump" aria-label="Прыжок и парирование">
+          <span class="action-icon">↑</span>
+          <span class="action-label">ПРЫЖОК / ПАРИ</span>
+        </button>
+        <button class="action-btn crouch" type="button" data-action="crouch" aria-label="Присесть">
+          <span class="action-icon">↓</span><span class="action-label">ПРИСЕСТЬ</span>
+        </button>
+        <button class="action-btn shoot" type="button" data-action="shoot" aria-label="Огонь">
+          <span class="action-icon">✦</span><span class="action-label">ОГОНЬ</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="overlay" class="overlay">
+      <section id="menuPanel" class="panel menu-panel">
+        <div class="poster-kicker">Городок Летунова · цирк, школа и магазин</div>
+        <h1 class="poster-title">ЛЕТУНОВ</h1>
+        <div class="poster-rule" aria-hidden="true"><span>✦</span></div>
+        <p class="poster-tagline">Два босса.<br>Один городок.</p>
+        <p class="poster-copy">Летунов ждёт в цирке, Денис — в школе.<br>Побеждай, собирай монеты и покупай баффы!</p>
+        <p id="menuProgress" class="menu-progress">Монеты: 0 · Сердец: 15</p>
+
+        <div class="controls-card">
+          <div class="controls-title">Управление</div>
+          <div class="controls-grid desktop-hints">
+            <div><span class="keys"><kbd data-bind="left">A</kbd><kbd data-bind="right">D</kbd></span><span class="ctrl-label">движение</span></div>
+            <div><span class="keys"><kbd data-bind="jump">ПРОБЕЛ</kbd></span><span class="ctrl-label">прыжок / пари</span></div>
+            <div><span class="keys"><kbd data-bind="dash">SHIFT</kbd></span><span class="ctrl-label">рывок</span></div>
+            <div><span class="keys"><kbd data-bind="crouch">S</kbd></span><span class="ctrl-label">присесть</span></div>
+            <div><span class="keys"><kbd>★ × 5</kbd></span><span class="ctrl-label">автосупер</span></div>
+            <div><span class="keys"><kbd data-bind="shoot">X</kbd></span><span class="ctrl-label">огонь вручную</span></div>
+          </div>
+          <div class="controls-grid touch-hints">
+            <div><span class="keys"><kbd>◀</kbd><kbd>▶</kbd></span><span class="ctrl-label">движение</span></div>
+            <div><span class="keys"><kbd>↑</kbd></span><span class="ctrl-label">прыжок и пари</span></div>
+            <div><span class="keys"><kbd>»</kbd></span><span class="ctrl-label">рывок</span></div>
+            <div><span class="keys"><kbd>↓</kbd></span><span class="ctrl-label">присесть</span></div>
+            <div><span class="keys"><kbd>★ × 5</kbd></span><span class="ctrl-label">автосупер</span></div>
+            <div><span class="keys"><kbd id="touchShootKey">∞</kbd></span><span id="touchShootHint" class="ctrl-label">стрельба — сама</span></div>
+          </div>
+          <p class="controls-tip">Кулак перепрыгивай или приседай, от живота приседай. Крик и меловой залп перепрыгивай. Розовые атаки парируй: прыгни и нажми прыжок ещё раз. Пять звёзд сами запускают супер.</p>
+        </div>
+
+        <button id="startButton" class="btn btn-primary" type="button">НА КАРТУ ГОРОДКА</button>
+        <button id="menuSettingsButton" class="btn btn-secondary" type="button">НАСТРОИТЬ УПРАВЛЕНИЕ</button>
+        <button id="installButton" class="btn btn-ghost install-button" type="button" hidden>УСТАНОВИТЬ ПРИЛОЖЕНИЕ</button>
+        <p class="poster-footnote">Рекомендуется горизонтальный экран · звук лучше включить</p>
+      </section>
+
+      <section id="pausePanel" class="panel panel-small" hidden>
+        <div class="poster-kicker">Антракт</div>
+        <h2 class="panel-title">ПАУЗА</h2>
+        <p class="panel-copy">Босс терпеливо ждёт. Он умеет ждать.</p>
+        <div class="btn-row">
+          <button id="resumeButton" class="btn btn-primary" type="button">ПРОДОЛЖИТЬ</button>
+          <button id="restartButton" class="btn btn-secondary" type="button">ЗАНОВО</button>
+          <button id="quitButton" class="btn btn-ghost" type="button">В МЕНЮ</button>
+          <button id="pauseSettingsButton" class="btn btn-secondary" type="button">УПРАВЛЕНИЕ</button>
+        </div>
+      </section>
+
+      <section id="resultPanel" class="panel panel-small" hidden>
+        <div id="resultKicker" class="poster-kicker">Финал представления</div>
+        <h2 id="resultTitle" class="panel-title">ПОБЕДА!</h2>
+        <p id="resultSub" class="panel-copy">Арена свободна. Публика в восторге.</p>
+        <div class="stats">
+          <div><span class="stat-label">Время боя</span><span id="resultTime" class="stat-value">00:00</span></div>
+          <div><span class="stat-label">Пропущено</span><span id="resultHits" class="stat-value">0</span></div>
+        </div>
+        <div class="btn-row">
+          <button id="retryButton" class="btn btn-primary" type="button">ЕЩЁ РАЗ</button>
+          <button id="menuButton" class="btn btn-secondary" type="button">НА КАРТУ</button>
+        </div>
+      </section>
+
+      <section id="shopPanel" class="panel shop-panel" hidden>
+        <div class="poster-kicker">Лавка на углу · товары для бойцов</div>
+        <h2 class="panel-title">МАГАЗИН БАФФОВ</h2>
+        <p class="panel-copy">Монеты: <strong id="shopCoins">0</strong>. Одна победа над боссом — одна монета.</p>
+        <p id="shopStatus" class="shop-status">Сердец: 15 · Дымовая завеса: нет · Побед: 0</p>
+        <div class="shop-grid">
+          <article class="shop-item">
+            <div class="shop-icon">♥</div>
+            <h3>СЕРДЦЕ ЛЕТУНОВА</h3>
+            <p>Навсегда добавляет одно сердце здоровья (5 HP).</p>
+            <button id="buyHeartButton" class="btn btn-primary" type="button">1 МОНЕТА</button>
+          </article>
+          <article class="shop-item">
+            <div class="shop-icon">☁</div>
+            <h3>ДЫМОВАЯ ЗАВЕСА</h3>
+            <p>Во время рывка герой исчезает в дыму, появляется в конце рывка и не получает урон, пока его нет.</p>
+            <button id="buySmokeButton" class="btn btn-primary" type="button">2 МОНЕТЫ</button>
+          </article>
+        </div>
+        <p id="shopNotice" class="shop-notice" aria-live="polite"></p>
+        <button id="closeShopButton" class="btn btn-ghost" type="button">НА КАРТУ</button>
+      </section>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+  <script>
+    const isDesktopShell = !!(window.chrome && window.chrome.webview);
+    if (!isDesktopShell && "serviceWorker" in navigator && location.protocol.startsWith("http")) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    }
+  </script>
+</body>
+</html>
