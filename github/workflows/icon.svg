@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<rect width="512" height="512" rx="100" fill="#451017"/>
+<circle cx="256" cy="256" r="205" fill="#e8d0a4" stroke="#261419" stroke-width="20"/>
+<ellipse cx="256" cy="300" rx="140" ry="115" fill="#d3a04a" stroke="#261419" stroke-width="14"/>
+<path d="M155 160 Q256 70 357 160 L340 230 Q256 195 172 230Z" fill="#21466f" stroke="#261419" stroke-width="14"/>
+<circle cx="210" cy="190" r="12" fill="#261419"/><circle cx="302" cy="190" r="12" fill="#261419"/>
+<text x="256" y="430" text-anchor="middle" font-family="Georgia,serif" font-weight="bold" font-size="62" fill="#451017">ЛЕТУНОВ</text>
+</svg>
