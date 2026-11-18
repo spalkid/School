@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    ЛЕТУНОВ — цирковой бой
    Мистер Большое Пузо катается по арене в леопардовом кресле,
    а во второй фазе встаёт и пускает в ход живот.
@@ -29,10 +29,12 @@
   const DENIS_MAX_HP = 8400; // уменьшено в 1.5 раза
   const EGOR_MAX_HP = 10500;
   const ELENA_MAX_HP = 7200;
+  const NIKITA_MAX_HP = 5600;
+  const NIKITA_RIDE_SCALE = 0.55; // Никита на велосипеде ниже, чтобы его можно было перепрыгнуть.
   const SUPER_CARD_DAMAGE = 420;
   // Одна звезда даёт слабый супер, пять — мощный. Урон растёт с числом звёзд.
-  const SUPER_MIN_DAMAGE = 80;
-  const SUPER_MAX_DAMAGE = 900;
+  const SUPER_MIN_DAMAGE = 120;
+  const SUPER_MAX_DAMAGE = 750;
   const TAU = Math.PI * 2;
   const DENIS_PHASE2_AT = 0.5;
   const DENIS_PHASE3_AT = 0.22;
@@ -102,6 +104,16 @@
       phase2: 'ПЕРЕМЕНА · ЖУРНАЛ, ЗАПАХ И БЫК',
       phase3: 'ПЕРЕМЕНА · ЖУРНАЛ, ЗАПАХ И БЫК',
       maxHp: ELENA_MAX_HP,
+    },
+    nikita: {
+      id: 'nikita',
+      name: 'НИКИТА',
+      site: 'ШКОЛА №53 · ТЁМНЫЙ КАБИНЕТ',
+      kicker: 'Школа №53 · перемена в тёмном коридоре',
+      phase1: 'НА ПЛЕЧАХ У СТЕПЫ · ТЕЛЕФОН И КОЛЕСО',
+      phase2: 'ВЕЛОСИПЕД · СТЕПА БЬЁТ СВЕРХУ',
+      phase3: 'ВЕЛОСИПЕД · СТЕПА БЬЁТ СВЕРХУ',
+      maxHp: NIKITA_MAX_HP,
     },
   };
 
@@ -276,12 +288,14 @@
     weapon: 'pistol',
     nutcrackerOwned: false,
     schoolCoin: false,
-    wins: { letunov: 0, denis: 0, egor: 0, elena: 0 },
+    nikitaKey: false,
+    wins: { letunov: 0, denis: 0, egor: 0, elena: 0, nikita: 0 },
     bossCoins: {
       letunov: { easy: false, hard: false },
       denis: { easy: false, hard: false },
       egor: { easy: false, hard: false },
       elena: { easy: false, hard: false },
+      nikita: { easy: false, hard: false },
     },
   };
 
@@ -305,11 +319,13 @@
       progress.nutcrackerOwned = !!data.nutcrackerOwned;
       progress.weapon = progress.nutcrackerOwned && data.weapon === 'nutcracker' ? 'nutcracker' : 'pistol';
       progress.schoolCoin = !!data.schoolCoin;
+      progress.nikitaKey = !!data.nikitaKey;
       if (data.wins && typeof data.wins === 'object') {
         progress.wins.letunov = Math.max(0, Math.floor(data.wins.letunov || 0));
         progress.wins.denis = Math.max(0, Math.floor(data.wins.denis || 0));
         progress.wins.egor = Math.max(0, Math.floor(data.wins.egor || 0));
         progress.wins.elena = Math.max(0, Math.floor(data.wins.elena || 0));
+        progress.wins.nikita = Math.max(0, Math.floor(data.wins.nikita || 0));
       }
       if (data.bossCoins && typeof data.bossCoins === 'object') {
         for (const id of Object.keys(progress.bossCoins)) {
@@ -351,7 +367,7 @@
         (progress.smokeDash ? 'куплена' : 'нет') +
         ` · Автонаводка: ${progress.autoAim ? 'куплена' : 'нет'}` +
         ` · Щелкунчик: ${progress.nutcrackerOwned ? (progress.weapon === 'nutcracker' ? 'в руках' : 'куплен') : 'нет'}` +
-        ` · Побед: ${progress.wins.letunov + progress.wins.denis + progress.wins.egor + (progress.wins.elena || 0)}`;
+        ` · Побед: ${Object.values(progress.wins).reduce((sum, n) => sum + (n || 0), 0)}`;
     }
     updateInventoryUI();
   }
@@ -1393,9 +1409,11 @@
     const cfg = BOSS_CONFIG[game.bossId] || BOSS_CONFIG.letunov;
     const isLetunov = cfg.id === 'letunov';
     const isElena = cfg.id === 'elena';
+    const isNikita = cfg.id === 'nikita';
+    const isStepa = cfg.id === 'stepa';
     const maxHp = Math.round(cfg.maxHp * difficultyConfig().hp);
     Object.assign(boss, {
-      x: isLetunov ? 950 : isElena ? 1040 : 1108,
+      x: isLetunov ? 950 : isElena ? 1040 : isNikita ? 930 : isStepa ? 1010 : 1108,
       y: GROUND,
       hp: maxHp,
       maxHp,
@@ -1502,6 +1520,45 @@
       elenaBookT: 0,
       elenaFootUp: 0,
       elenaChaseSpeed: 0,
+      egorPalmSide: 1,
+      // Никита и Степа: у каждого свои тайминги, чтобы не пересекаться
+      // с атаками старых боссов.
+      nkState: 'nkIntro',
+      nkAttackT: 1.6,
+      nkPattern: 0,
+      nkTransition: false,
+      nkPunchP: 0,
+      nkPunchActive: false,
+      nkRideDir: 1,
+      nkRideSpeed: 310,
+      nkRideT: 0,
+      nkBgPunchT: 2.2,
+      nkBgPunchX: W / 2,
+      nkBgPunchP: 0,
+      nkBgFistActive: false,
+      nkWheelFlyT: 0,
+      nkFallT: 0,
+      nkDeathFlee: 0,
+      stState: 'idle',
+      stAttackT: 1.7,
+      stPattern: 0,
+      stPunchP: 0,
+      stPunchActive: false,
+      stTransition: false,
+      stPlatT: 0,
+      stHazardT: 0,
+      stBoltT: 0,
+      stBoltX: 0,
+      stBoltY: 0,
+      stBoltOn: false,
+      stVehicleT: 0,
+      stScrollT: 0,
+      stScrollDist: 0,
+      stScrollSpeed: 190,
+      stExit: false,
+      stCrashT: 0,
+      stRideStartT: 0,
+      stHairSpark: 0,
     });
   }
 
@@ -1545,6 +1602,8 @@
       elenaArea: 'classroom',
       elenaEscape: false,
       elenaExitHint: 0,
+      nikitaDark: false,
+      stepaScroll: false,
     });
     motes.length = 0;
     for (let i = 0; i < 34; i++) {
@@ -3272,6 +3331,12 @@
     Sound.init();
     resetWorld();
     if (game.bossId === 'elena') setupElenaArena();
+    // Егор больше не начинает с банановой фазы: сразу вторая фаза,
+    // где он сидит на дереве, а по бокам стоят пальмы.
+    if (game.bossId === 'egor') {
+      startEgorPhase2();
+      game.egorClouds = false;
+    }
     game.scene = 'fight';
     game.introT = 1.9;
     game.fightTime = 0;
@@ -3368,6 +3433,11 @@
         hero.maxHp = heroMaxHp();
         hero.hp = hero.maxHp;
       }
+      // Ключи — постоянный прогресс, как и монеты.
+      if (cfg.id === 'elena' && !progress.nikitaKey) {
+        progress.nikitaKey = true;
+        rewardText += ' Ключ от тёмного кабинета получен!';
+      }
       saveProgress();
       if (heartDropped) {
         rewardText += ' Сердце Летунова выпало: +1 сердце навсегда!';
@@ -3389,7 +3459,9 @@
             ? `Егор снова ушёл в лес на сложности «${diffLabel}». Купи усиления в магазине и возвращайся.`
             : cfg.id === 'elena'
               ? `Елена Гурьевна оставила тебя после уроков на сложности «${diffLabel}». Соберись и зайди в кабинет снова.`
-              : `Летунов ещё катается по арене на сложности «${diffLabel}». Отдышись и попробуй снова.`;
+              : cfg.id === 'nikita'
+                ? `Никита и Степа снова скрылись в тёмном кабинете на сложности «${diffLabel}». Запасись сердцем и возвращайся.`
+                : `Летунов ещё катается по арене на сложности «${diffLabel}». Отдышись и попробуй снова.`;
     }
     resultTime.textContent = formatTime(game.fightTime);
     resultHits.textContent = String(game.hitsTaken);
@@ -3667,9 +3739,9 @@
       h.vy = Math.min(h.vy + gravity * dt, 1500);
     }
 
-    // огонь
+    // огонь: ровно один выстрел каждые 0.2 секунды, урон прежний
     if (shooting && h.shootCd <= 0) {
-      h.shootCd = 0.09;
+      h.shootCd = 0.2;
       h.shootAnim = 1;
       fireBullet();
       game.shake = Math.max(game.shake, 0.5);
@@ -3930,19 +4002,33 @@
     const bx = h.x + ax * 34;
     const by = h.y - lerp(52, 32, crouchK) + ay * 32;
     const nutcracker = progress.weapon === 'nutcracker' && progress.nutcrackerOwned;
-    bullets.push({
-      x: bx,
-      y: by,
-      vx: ax * (nutcracker ? 1050 : 1180),
-      vy: ay * (nutcracker ? 1050 : 1180),
-      life: 1.5,
-      t: 0,
-      dir: ax >= 0 ? 1 : -1,
-      dead: false,
-      dmg: (nutcracker ? 9 : 9) / (progress.autoAim ? 1.3 : 1),
-      nutcracker,
-      hitSomething: false,
-    });
+    // Щелкунчик стреляет двумя зелёными пулями. Наводка берётся только
+    // в момент выстрела: если враг ушёл — пули летят по старой траектории.
+    const target = nutcracker ? autoAimPoint() : null;
+    let baseAng = Math.atan2(ay || 0, ax || 1);
+    if (target) baseAng = Math.atan2(target.y - by, target.x - bx);
+    const count = nutcracker ? 2 : 1;
+    for (let shot = 0; shot < count; shot++) {
+      const ang = baseAng + (nutcracker ? (shot === 0 ? -0.032 : 0.032) : 0);
+      const speed = nutcracker ? 1050 : 1180;
+      const sx = bx + (nutcracker ? Math.cos(ang) * 18 * shot : 0);
+      const sy = by + (nutcracker ? Math.sin(ang) * 18 * shot + (shot ? 8 : -8) : 0);
+      bullets.push({
+        x: sx,
+        y: sy,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed,
+        life: 1.5,
+        t: 0,
+        dir: Math.cos(ang) >= 0 ? 1 : -1,
+        dead: false,
+        dmg: 9 / (progress.autoAim ? 1.3 : 1),
+        nutcracker,
+        green: nutcracker,
+        noHoming: nutcracker,
+        hitSomething: false,
+      });
+    }
     for (let i = 0; i < 4; i++) {
       addParticle({
         kind: 'spark',
@@ -3953,7 +4039,7 @@
         life: rand(0.08, 0.2),
         maxLife: 0.2,
         size: rand(2, 5),
-        color: nutcracker ? pick(['#ff8e7c', '#ffd0c4', RUST]) : pick([GOLD_BRIGHT, CREAM, RUST]),
+        color: nutcracker ? pick(['#7dff9a', '#b8ffd0', '#4fd36f']) : pick([GOLD_BRIGHT, CREAM, RUST]),
         rot: rand(0, TAU),
         vr: rand(-10, 10),
         grav: 300,
@@ -3964,9 +4050,9 @@
   }
 
   function spawnNutcrackerChild(b) {
-    const target = autoAimPoint();
-    let ang = Math.atan2(b.vy || 0, b.vx || b.dir || 1);
-    if (target) ang = Math.atan2(target.y - b.y, target.x - b.x);
+    // Дочерняя зелёная пуля продолжает направление родителя,
+    // а не подруливает к врагу после его перемещения.
+    const ang = Math.atan2(b.vy || 0, b.vx || b.dir || 1);
     bullets.push({
       x: b.x,
       y: b.y,
@@ -3978,7 +4064,7 @@
       dead: false,
       dmg: 4 / (progress.autoAim ? 1.3 : 1),
       green: true,
-      homing: 0.55,
+      noHoming: true,
       small: true,
     });
     spawnRing(b.x, b.y, '#7dff9a', 16);
@@ -5268,6 +5354,14 @@
   }
 
   function updateBoss(dt) {
+    if (game.bossId === 'nikita') {
+      updateNikitaBoss(dt);
+      return;
+    }
+    if (game.bossId === 'stepa') {
+      updateStepaBoss(dt);
+      return;
+    }
     if (game.bossId === 'elena') {
       updateElenaBoss(dt);
       return;
@@ -5835,6 +5929,18 @@
   // ---------- столкновения и урон ----------
   function bossBodyRect() {
     const b = boss;
+    if (game.bossId === 'nikita') {
+      if (b.phase === 2) {
+        return { x: b.x - 50, y: GROUND - 128, w: 100, h: 128 };
+      }
+      return { x: b.x - 88, y: GROUND - 300, w: 168, h: 300 };
+    }
+    if (game.bossId === 'stepa') {
+      if (b.phase === 2) {
+        return { x: b.x - 64, y: GROUND - 220, w: 128, h: 220 };
+      }
+      return { x: b.x - 58, y: GROUND - 330, w: 116, h: 330 };
+    }
     if (game.bossId === 'elena') {
       if (b.state === 'elenaBull') {
         return { x: b.x - 58, y: GROUND - 148, w: 150, h: 148 };
@@ -5929,6 +6035,20 @@
   function damageBoss(amount, x, y, charge = true) {
     const b = boss;
     if (b.dying || game.ended || b.egorFinale) return;
+    // Никиту нельзя бить, пока Степа несёт его или пока идёт смена фазы.
+    if (game.bossId === 'nikita' && (b.nkState === 'nkIntro' || b.nkTransition)) return;
+    // Во второй фазе Степа уже на скейте — его нельзя добить раньше выхода.
+    // Попадания только сбивают спесь и заряжают супер, но HP не падает до нуля.
+    if (game.bossId === 'stepa' && (b.stTransition || b.stState === 'stCrash')) return;
+    if (game.bossId === 'stepa' && b.phase === 2) {
+      b.hp = Math.max(1, b.hp - amount * 0.25);
+      b.hitFlash = 0.085;
+      b.shotTick = (b.shotTick || 0) + 1;
+      spawnHitSparks(x, y);
+      if (b.shotTick % 2 === 0) Sound.sfx('bosshit');
+      if (charge) addSuperCharge(amount * 0.45);
+      return;
+    }
     // Пока Денис поднимается на третий этаж, его нельзя бить.
     if (game.bossId === 'denis' && b.denisClimb) {
       if (!b.climbHintShown) {
@@ -5983,6 +6103,16 @@
     if (game.bossId === 'elena' && b.phase === 1 && b.hp <= b.maxHp / 3) {
       b.hp = Math.max(1, b.hp);
       startElenaPhase2();
+      return;
+    }
+    if (game.bossId === 'nikita' && b.phase === 1 && b.hp <= b.maxHp * 0.5) {
+      b.hp = Math.max(1, b.hp);
+      startNikitaPhase2();
+      return;
+    }
+    if (game.bossId === 'stepa' && b.phase === 1 && b.hp <= b.maxHp * 0.5) {
+      b.hp = Math.max(1, b.hp);
+      startStepaPhase2();
       return;
     }
 
@@ -6177,7 +6307,44 @@
       }
     }
 
+    if (game.bossId === 'nikita') {
+      const punch = nikitaPunchRect();
+      if (punch && overlap(rect, punch)) {
+        hurtHero(punch.x + punch.w);
+        return;
+      }
+      const bgFist = nikitaBgFistRect();
+      if (bgFist && overlap(rect, bgFist)) {
+        hurtHero(boss.nkBgPunchX);
+        return;
+      }
+    }
+
+    if (game.bossId === 'stepa') {
+      const punch = stepaPunchRect();
+      if (punch && overlap(rect, punch)) {
+        hurtHero(punch.x + punch.w);
+        return;
+      }
+      if (boss.stBoltOn) {
+        const line = stepaHairLine();
+        if (segmentHitsRect(line.x1, line.y1, line.x2, line.y2, rect, 13)) {
+          hurtHero(boss.x);
+          return;
+        }
+      }
+      for (const s of bossShots) {
+        if (s.kind !== 'stepaHairBolt') continue;
+        if (segmentHitsRect(s.x1, s.y1, s.x2, s.y2, rect, 11)) {
+          hurtHero(s.x2);
+          bossShots.splice(bossShots.indexOf(s), 1);
+          return;
+        }
+      }
+    }
+
     for (const s of bossShots) {
+      if (s.kind === 'stepaHairBolt') continue;
       if (s.harmless) continue;
       if (circleRect(s.x, s.y, s.r + 3, rect)) {
         hurtHero(s.x);
@@ -6202,7 +6369,8 @@
       b.life -= dt;
 
       // Автонаводка и полу-самонаводка плавно подруливают снаряд к боссу.
-      if (progress.autoAim || b.homing) {
+      // У щелкунчика наводка только на момент выстрела — noHoming.
+      if (!b.noHoming && (progress.autoAim || b.homing)) {
         const target = autoAimPoint();
         if (target) {
           const speed = Math.hypot(b.vx, b.vy) || 1180;
@@ -6396,6 +6564,55 @@
       s.life -= dt;
       const dir = s.dir || 1;
       s.spin += dt * (s.kind === 'flower' ? 2.4 : s.kind === 'spring' ? 8 : 9) * dir;
+
+      if (s.kind === 'nikitaPhone') {
+        s.vy += (s.gravity || 900) * dt;
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.spin += dt * 8;
+        if (s.y >= GROUND - 12) {
+          spawnDust(s.x, GROUND, 5, 0.7);
+          spawnRing(s.x, GROUND - 6, '#7ee0ff', 14);
+          bossShots.splice(i, 1);
+          continue;
+        }
+        if (s.life <= 0 || s.x < -60 || s.x > W + 60) {
+          bossShots.splice(i, 1);
+          continue;
+        }
+        continue;
+      }
+
+      if (s.kind === 'bikeWheel') {
+        s.x += s.vx * dt;
+        s.spin += dt * 9 * (s.vx >= 0 ? 1 : -1);
+        if (Math.random() < dt * 18) {
+          spawnDust(s.x, GROUND - 2, 1, 0.3);
+        }
+        if (s.life <= 0 || s.x < -90) {
+          bossShots.splice(i, 1);
+          continue;
+        }
+        continue;
+      }
+
+      if (s.kind === 'stepaVehicle' || s.kind === 'stepaScooter') {
+        s.x += s.vx * dt;
+        s.spin += dt * (s.kind === 'stepaScooter' ? 7 : 5);
+        if (s.life <= 0 || s.x < -100) {
+          bossShots.splice(i, 1);
+          continue;
+        }
+        continue;
+      }
+
+      if (s.kind === 'stepaHairBolt') {
+        if (s.life <= 0) {
+          bossShots.splice(i, 1);
+          continue;
+        }
+        continue;
+      }
 
       if (s.kind === 'elenaGlobe') {
         s.vy += 1500 * dt;
@@ -7542,9 +7759,19 @@
       return;
     }
     if (n.kind === 'closed') {
+      if (progress.nikitaKey) {
+        Sound.sfx('click');
+        startGame('nikita');
+        return;
+      }
       schoolState.toast = 'Кабинет закрыт. Из-за двери слышно, как кто-то точит красный карандаш.';
       schoolState.toastT = 2.6;
       Sound.sfx('hurt');
+      return;
+    }
+    if (n.kind === 'nikita') {
+      Sound.sfx('click');
+      startGame('nikita');
       return;
     }
     if (n.kind === 'elena') {
@@ -7712,31 +7939,74 @@
     roundRect(ctx, -72, -262, 144, 262, 10);
     fillStroke(ctx, open ? '#2d5f57' : '#3c2a24', INK, 4);
     if (open) {
-      // проём и класс за дверью
-      roundRect(ctx, -61, -250, 122, 250, 6);
-      fillStroke(ctx, '#f0d9a0', '#8b6a41', 3);
-      ctx.fillStyle = '#2f4d3f';
-      roundRect(ctx, -48, -220, 96, 92, 4);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255, 247, 220, 0.75)';
-      ctx.font = `700 11px Verdana, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText('2 · 2 = ?', 0, -178);
-      // парты в глубине
-      ctx.fillStyle = '#b98753';
-      roundRect(ctx, -48, -96, 42, 8, 3);
-      ctx.fill();
-      roundRect(ctx, 8, -96, 42, 8, 3);
-      ctx.fill();
-      // приоткрытая створка
-      ctx.save();
-      ctx.translate(66, -126);
-      ctx.rotate(-0.32);
-      roundRect(ctx, 0, -124, 34, 250, 6);
-      fillStroke(ctx, '#497f73', INK, 3);
-      ctx.fillStyle = GOLD;
-      circle(ctx, 21, 0, 3.4, GOLD, INK, 1.6);
-      ctx.restore();
+      if (kind === 'nikita') {
+        // Тёмный кабинет: свет почти не проходит, у стены сидит
+        // маленький Никита и ждёт.
+        roundRect(ctx, -61, -250, 122, 250, 6);
+        fillStroke(ctx, '#17161b', '#4d4436', 3);
+        const glow = ctx.createRadialGradient(0, -118, 9, 0, -118, 94);
+        glow.addColorStop(0, 'rgba(255, 214, 140, 0.28)');
+        glow.addColorStop(1, 'rgba(255, 214, 140, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(0, -118, 94, 0, TAU);
+        ctx.fill();
+        // доска и парты в темноте
+        ctx.fillStyle = 'rgba(31, 64, 53, 0.75)';
+        roundRect(ctx, -48, -222, 96, 74, 4);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(185, 135, 83, 0.48)';
+        roundRect(ctx, -48, -104, 38, 7, 3);
+        ctx.fill();
+        roundRect(ctx, 8, -80, 38, 7, 3);
+        ctx.fill();
+        // Никита: маленький силуэт с телефоном
+        ctx.save();
+        ctx.translate(-2, -20);
+        ctx.fillStyle = '#1d1a1c';
+        roundRect(ctx, -16, -74, 32, 56, 12);
+        ctx.fill();
+        circle(ctx, 0, -92, 17, '#2b2424', INK, 2.6);
+        ctx.strokeStyle = '#2b2424';
+        ctx.lineWidth = 7;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-12, -62);
+        ctx.lineTo(-24, -40);
+        ctx.moveTo(13, -62);
+        ctx.lineTo(25, -45);
+        ctx.stroke();
+        ctx.fillStyle = '#7ee0ff';
+        roundRect(ctx, 20, -54, 8, 14, 2);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        // проём и класс за дверью
+        roundRect(ctx, -61, -250, 122, 250, 6);
+        fillStroke(ctx, '#f0d9a0', '#8b6a41', 3);
+        ctx.fillStyle = '#2f4d3f';
+        roundRect(ctx, -48, -220, 96, 92, 4);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255, 247, 220, 0.75)';
+        ctx.font = `700 11px Verdana, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('2 · 2 = ?', 0, -178);
+        // парты в глубине
+        ctx.fillStyle = '#b98753';
+        roundRect(ctx, -48, -96, 42, 8, 3);
+        ctx.fill();
+        roundRect(ctx, 8, -96, 42, 8, 3);
+        ctx.fill();
+        // приоткрытая створка
+        ctx.save();
+        ctx.translate(66, -126);
+        ctx.rotate(-0.32);
+        roundRect(ctx, 0, -124, 34, 250, 6);
+        fillStroke(ctx, '#497f73', INK, 3);
+        ctx.fillStyle = GOLD;
+        circle(ctx, 21, 0, 3.4, GOLD, INK, 1.6);
+        ctx.restore();
+      }
     } else {
       roundRect(ctx, -61, -250, 122, 250, 6);
       fillStroke(ctx, '#5b3b2c', INK, 3);
@@ -7778,7 +8048,15 @@
     ctx.font = `700 10px Verdana, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(kind === 'closed' ? 'КАБИНЕТ ЗАКРЫТ' : 'КАБИНЕТ 2-Б · ОТКРЫТ', x, GROUND - 288);
+    ctx.fillText(
+      kind === 'closed'
+        ? 'КАБИНЕТ ЗАКРЫТ'
+        : kind === 'nikita'
+          ? 'ТЁМНЫЙ КАБИНЕТ · ОТКРЫТ'
+          : 'КАБИНЕТ 2-Б · ОТКРЫТ',
+      x,
+      GROUND - 288
+    );
     ctx.restore();
   }
 
@@ -7920,7 +8198,11 @@
     ctx.lineTo(978, 117);
     ctx.stroke();
 
-    drawCorridorDoor(SCHOOL_DOORS[0].x, false, 'closed');
+    drawCorridorDoor(
+      SCHOOL_DOORS[0].x,
+      !!progress.nikitaKey,
+      progress.nikitaKey ? 'nikita' : 'closed'
+    );
     drawCorridorDoor(SCHOOL_DOORS[1].x, true, 'elena');
     drawSchoolTrash();
     drawDenisCorridorFigure(SCHOOL_DOORS[2].x);
@@ -8081,8 +8363,10 @@
         (id === 'denis'
           ? 'Очки, лазер, кнопки и цветы, а на третьем этаже — птицы и бетон.'
           : id === 'egor'
-            ? 'Пальма, бананы, кокосы, падающее дерево, погоня по веткам, бык и стая птиц.'
-            : 'Кресло, кулаки, живот и крик. Классика цирка.');
+            ? 'Сразу вторая фаза: Егор сидит на дереве, облака, кокосы и рука из-за края.'
+            : id === 'nikita'
+              ? 'Степа держит Никиту на плечах, телефон, кулак и колесо. Потом — велосипед.'
+              : 'Кресло, кулаки, живот и крик. Классика цирка.');
     }
     game.shopOpen = false;
     showPanel('difficulty');
@@ -9111,6 +9395,19 @@
 
   function drawBossShots() {
     for (const s of bossShots) {
+      if (
+        s.kind === 'nikitaPhone' ||
+        s.kind === 'bikeWheel' ||
+        s.kind === 'stepaVehicle' ||
+        s.kind === 'stepaScooter'
+      ) {
+        drawNikitaStepaShot(s);
+        continue;
+      }
+      if (s.kind === 'stepaHairBolt') {
+        drawStepaHairBolt(s.x1, s.y1, s.x2, s.y2, 1);
+        continue;
+      }
       if (s.kind === 'elenaGlobe') {
         drawElenaGlobe(s);
         continue;
@@ -10559,6 +10856,1597 @@
     drawMapHUD();
   }
 
+  // ================= НИКИТА И СТЕПА: ШКОЛА И СКЕЙТ-ПАРК =================
+
+  function nikitaToIdle(delay) {
+    const b = boss;
+    b.nkState = 'idle';
+    b.nkAttackT = delay === undefined ? 1.45 : delay;
+    b.nkPunchP = 0;
+    b.nkPunchActive = false;
+  }
+
+  function startNikitaPhase2() {
+    const b = boss;
+    if (b.dying || b.phase >= 2) return;
+    b.phase = 2;
+    b.hp = Math.max(1, b.hp);
+    b.nkTransition = true;
+    b.nkState = 'nkFlee';
+    b.timer = 0;
+    b.nkPunchP = 0;
+    b.nkPunchActive = false;
+    b.nkBgPunchP = 0;
+    b.nkBgFistActive = false;
+    b.nkBgPunchT = 2.3;
+    b.nkRideT = 0;
+    b.nkWheelFlyT = 0;
+    b.nkFallT = 0;
+    b.nkRideDir = hero.x < W / 2 ? 1 : -1;
+    bossShots.length = 0;
+    waves.length = 0;
+    soundWaves.length = 0;
+    platforms.length = 0;
+    game.shake = Math.max(game.shake, 10);
+    game.flash = Math.max(game.flash, 0.2);
+    Sound.sfx('roar');
+    spawnComic('СТЕПА ПАДАЕТ!', b.x, 154, 25, GOLD_BRIGHT);
+    spawnComic('НИКИТА ЛЕТИТ ВНИЗ!', b.x, 194, 15, CREAM);
+  }
+
+  function spawnNikitaPhone() {
+    const b = boss;
+    const riding = b.phase === 2;
+    const fromX = riding ? b.x + b.face * 26 : b.x + 34;
+    const fromY = riding ? GROUND - 96 : GROUND - 286;
+    const targetX = clamp(hero.x, ARENA_L + 30, ARENA_R - 30);
+    const targetY = hero.y - 54;
+    const fuse = 0.78;
+    const gravity = 900;
+    bossShots.push({
+      kind: 'nikitaPhone',
+      x: fromX,
+      y: fromY,
+      vx: (targetX - fromX) / fuse,
+      vy: (targetY - fromY) / fuse - 0.5 * gravity * fuse,
+      gravity,
+      r: 15,
+      t: 0,
+      life: 4,
+      spin: rand(0, TAU),
+      dir: b.face,
+    });
+    spawnComic('ТЕЛЕФОН!', b.x - 110, 160, 18, '#7ee0ff');
+    Sound.sfx('shoot');
+  }
+
+  function spawnNikitaWheel() {
+    bossShots.push({
+      kind: 'bikeWheel',
+      x: W + 64,
+      y: GROUND - 36,
+      vx: -430 * difficultyConfig().speed,
+      vy: 0,
+      r: 36,
+      t: 0,
+      life: 5,
+      spin: rand(0, TAU),
+      dir: -1,
+    });
+    spawnComic('КОЛЕСО!', W - 180, 190, 20, GOLD_BRIGHT);
+    Sound.sfx('telegraph');
+  }
+
+  function nikitaPunchRect() {
+    const b = boss;
+    if (game.bossId !== 'nikita' || b.phase !== 1 || !b.nkPunchActive) return null;
+    const reach = 300 * clamp(b.nkPunchP, 0, 1);
+    return {
+      x: b.x - 74 - reach,
+      y: GROUND - 196,
+      w: reach + 70,
+      h: 78,
+    };
+  }
+
+  function nikitaBgFistRect() {
+    const b = boss;
+    if (game.bossId !== 'nikita' || b.phase !== 2 || !b.nkBgFistActive) return null;
+    const p = clamp(b.nkBgPunchP, 0, 2);
+    if (p <= 0.2 || p >= 1.5) return null;
+    const k = p <= 1 ? easeOutCubic(p) : easeInCubic(2 - p);
+    const fy = lerp(-80, GROUND - 150, k);
+    return {
+      x: b.nkBgPunchX - 54,
+      y: fy - 54,
+      w: 108,
+      h: 108,
+    };
+  }
+
+  function updateNikitaBoss(dt) {
+    const b = boss;
+    b.timer += dt;
+    b.breathe += dt;
+    b.hitFlash = Math.max(0, b.hitFlash - dt);
+    b.hpShown = damp(b.hpShown, b.hp, 9, dt);
+    b.nkDeathFlee += dt;
+
+    if (b.dying) {
+      b.deathT += dt;
+      return;
+    }
+
+    if (hero.dead) {
+      b.nkPunchActive = false;
+      b.nkBgFistActive = false;
+      return;
+    }
+
+    if (b.phase === 1) {
+      if (b.nkState === 'nkIntro') {
+        if (game.introT > 0.05) {
+          b.timer = 0;
+          return;
+        }
+        if (b.timer >= 1.5) nikitaToIdle(1.1);
+        return;
+      }
+      if (b.nkState === 'idle') {
+        b.nkAttackT -= dt;
+        if (b.nkAttackT <= 0) {
+          const type = b.nkPattern++ % 3;
+          if (type === 0) {
+            b.nkState = 'nkPhoneWind';
+            b.timer = 0;
+            spawnComic('НИКИТА КИДАЕТ ТЕЛЕФОН!', b.x, 148, 19, '#7ee0ff');
+            Sound.sfx('telegraph');
+          } else if (type === 1) {
+            b.nkState = 'nkPunchWind';
+            b.timer = 0;
+            b.nkPunchP = 0;
+            spawnComic('СТЕПА БЬЁТ РУКОЙ!', b.x - 90, 166, 19, GOLD_BRIGHT);
+            Sound.sfx('telegraph');
+          } else {
+            b.nkState = 'nkWheelWind';
+            b.timer = 0;
+            spawnComic('КОЛЕСО С ПРАВА!', W - 200, 178, 19, GOLD_BRIGHT);
+            Sound.sfx('telegraph');
+          }
+        }
+      } else if (b.nkState === 'nkPhoneWind') {
+        if (b.timer >= 0.58) {
+          spawnNikitaPhone();
+          b.nkState = 'nkPhoneRecover';
+          b.timer = 0;
+        }
+      } else if (b.nkState === 'nkPhoneRecover') {
+        if (b.timer >= 0.38) nikitaToIdle(1.2);
+      } else if (b.nkState === 'nkPunchWind') {
+        b.nkPunchP = clamp(b.timer / 0.68, 0, 1) * 0.14;
+        if (b.timer >= 0.68) {
+          b.nkState = 'nkPunchOut';
+          b.timer = 0;
+          b.nkPunchP = 0.14;
+          b.nkPunchActive = true;
+          Sound.sfx('punch');
+        }
+      } else if (b.nkState === 'nkPunchOut') {
+        b.nkPunchP = lerp(0.14, 1, easeOutCubic(clamp(b.timer / 0.22, 0, 1)));
+        if (b.timer >= 0.42) {
+          b.nkState = 'nkPunchRecover';
+          b.timer = 0;
+          b.nkPunchActive = false;
+        }
+      } else if (b.nkState === 'nkPunchRecover') {
+        b.nkPunchP = lerp(1, 0, easeInOutQuad(clamp(b.timer / 0.4, 0, 1)));
+        if (b.timer >= 0.4) nikitaToIdle(1.15);
+      } else if (b.nkState === 'nkWheelWind') {
+        if (b.timer >= 0.72) {
+          spawnNikitaWheel();
+          b.nkState = 'nkWheelRecover';
+          b.timer = 0;
+        }
+      } else if (b.nkState === 'nkWheelRecover') {
+        if (b.timer >= 0.55) nikitaToIdle(1.25);
+      }
+      return;
+    }
+
+    // ---------- вторая фаза: Никита на велосипеде ----------
+    if (b.nkState === 'nkFlee') {
+      b.nkTransition = true;
+      if (b.timer >= 1.55) {
+        b.nkState = 'nkFall';
+        b.timer = 0;
+        b.nkFallT = 0;
+        spawnDust(W / 2, GROUND, 10, 1);
+        game.shake = Math.max(game.shake, 5);
+        Sound.sfx('land');
+      }
+      return;
+    }
+    if (b.nkState === 'nkFall') {
+      b.nkFallT = clamp(b.timer / 0.9, 0, 1);
+      if (b.timer >= 0.98) {
+        b.nkState = 'nkWheelFly';
+        b.timer = 0;
+        spawnComic('КОЛЕСО СЛЕВА СВЕРХУ!', W / 2, 180, 19, GOLD_BRIGHT);
+        Sound.sfx('telegraph');
+      }
+      return;
+    }
+    if (b.nkState === 'nkWheelFly') {
+      if (b.timer >= 0.85) {
+        b.nkState = 'nkBikeBuild';
+        b.timer = 0;
+        game.shake = Math.max(game.shake, 9);
+        Sound.sfx('land');
+      }
+      return;
+    }
+    if (b.nkState === 'nkBikeBuild') {
+      if (b.timer >= 0.85) {
+        b.x = W / 2;
+        b.nkState = 'nkRide';
+        b.timer = 0;
+        b.nkTransition = false;
+        b.nkRideDir = 1;
+        b.nkAttackT = 1.4;
+        b.nkBgPunchT = 2.2;
+        b.nkRideT = 0;
+        spawnComic('ПОЕХАЛИ!', W / 2, 170, 26, GOLD_BRIGHT);
+        Sound.sfx('roar');
+      }
+      return;
+    }
+    if (b.nkState === 'nkRide') {
+      // Никита катается по всей карте туда-сюда.
+      b.nkRideT += dt;
+      b.x += b.nkRideDir * b.nkRideSpeed * dt;
+      if (b.x > W - 210) {
+        b.x = W - 210;
+        b.nkRideDir = -1;
+      } else if (b.x < 210) {
+        b.x = 210;
+        b.nkRideDir = 1;
+      }
+      b.face = b.nkRideDir;
+      b.nkAttackT -= dt;
+      if (b.nkAttackT <= 0) {
+        if (b.nkPattern++ % 2 === 0) spawnNikitaPhone();
+        else spawnNikitaWheel();
+        b.nkAttackT = 2.65 * difficultyConfig().wait;
+      }
+      // Степа появляется на заднем плане и бьёт сверху.
+      b.nkBgPunchT -= dt;
+      if (!b.nkBgFistActive && b.nkBgPunchT <= 0) {
+        b.nkBgFistActive = true;
+        b.nkBgPunchP = 0;
+        b.nkBgPunchX = clamp(hero.x, 170, W - 170);
+        b.nkBgPunchT = 3.2 * difficultyConfig().wait;
+        spawnComic('СТЕПА БЬЁТ СВЕРХУ!', b.nkBgPunchX, 156, 19, GOLD_BRIGHT);
+        Sound.sfx('telegraph');
+      }
+      if (b.nkBgFistActive) {
+        b.nkBgPunchP += dt * 2.6;
+        if (b.nkBgPunchP >= 2) {
+          b.nkBgFistActive = false;
+          b.nkBgPunchP = 0;
+          game.shake = Math.max(game.shake, 5);
+        }
+      }
+    }
+  }
+
+  function stepaToIdle(delay) {
+    const b = boss;
+    b.stState = 'idle';
+    b.stAttackT = delay === undefined ? 1.5 : delay;
+    b.stPunchP = 0;
+    b.stPunchActive = false;
+    b.stBoltOn = false;
+  }
+
+  function startStepaPhase2() {
+    const b = boss;
+    if (b.dying || b.phase >= 2) return;
+    b.phase = 2;
+    b.hp = Math.max(1, b.hp);
+    b.stState = 'stRideStart';
+    b.stTransition = true;
+    b.timer = 0;
+    b.stRideStartT = 0;
+    b.stScrollT = 0;
+    b.stScrollDist = 0;
+    b.stScrollSpeed = 190;
+    b.stExit = false;
+    b.stCrashT = 0;
+    b.stAttackT = 1.5;
+    b.stPlatT = 0;
+    b.stHazardT = 0;
+    b.stBoltOn = false;
+    b.stPunchActive = false;
+    bossShots.length = 0;
+    platforms.length = 0;
+    waves.length = 0;
+    soundWaves.length = 0;
+    hero.x = 260;
+    hero.y = GROUND;
+    hero.vx = 0;
+    hero.vy = 0;
+    hero.onGround = true;
+    game.stepaScroll = true;
+    game.stepaScrollDist = 0;
+    game.shake = Math.max(game.shake, 12);
+    game.flash = Math.max(game.flash, 0.22);
+    Sound.sfx('roar');
+    spawnComic('СТЕПА ВСТАЛ НА СКЕЙТ!', W / 2, 150, 27, GOLD_BRIGHT);
+    spawnComic('БЕГИ К ВЫХОДУ!', W / 2, 194, 16, CREAM);
+  }
+
+  function spawnStepaVehicle(kind) {
+    const type = kind || pick(['bike', 'skate', 'scooter']);
+    bossShots.push({
+      kind: 'stepaVehicle',
+      vehicle: type,
+      x: W + 70,
+      y: GROUND - 30,
+      vx: -330 * difficultyConfig().speed,
+      vy: 0,
+      r: 34,
+      t: 0,
+      life: 7,
+      spin: 0,
+      dir: -1,
+    });
+    Sound.sfx('telegraph');
+  }
+
+  function spawnStepaScrollPlatform() {
+    platforms.push({
+      kind: 'skatePlatform',
+      x: W + 120,
+      y: GROUND - rand(130, 210),
+      w: rand(150, 210),
+      h: 18,
+      solid: true,
+      life: 20,
+    });
+  }
+
+  function spawnStepaScooter() {
+    bossShots.push({
+      kind: 'stepaScooter',
+      x: W + 60,
+      y: GROUND - 24,
+      vx: -(300 + rand(0, 90)) * difficultyConfig().speed,
+      vy: 0,
+      r: 30,
+      t: 0,
+      life: 8,
+      spin: 0,
+      dir: -1,
+    });
+  }
+
+  function stepaPunchRect() {
+    const b = boss;
+    if (game.bossId !== 'stepa' || b.phase !== 1 || !b.stPunchActive) return null;
+    const reach = 290 * clamp(b.stPunchP, 0, 1);
+    return {
+      x: b.x - 58 - reach,
+      y: GROUND - 170,
+      w: reach + 54,
+      h: 66,
+    };
+  }
+
+  function stepaHairLine() {
+    const b = boss;
+    return {
+      x1: b.x - 26,
+      y1: GROUND - 302,
+      x2: b.stBoltX,
+      y2: b.stBoltY,
+    };
+  }
+
+  function updateStepaBoss(dt) {
+    const b = boss;
+    b.timer += dt;
+    b.breathe += dt;
+    b.hitFlash = Math.max(0, b.hitFlash - dt);
+    b.hpShown = damp(b.hpShown, b.hp, 9, dt);
+    b.stHairSpark = Math.max(0, b.stHairSpark - dt * 2.5);
+
+    if (b.dying) {
+      b.deathT += dt;
+      return;
+    }
+    if (hero.dead) {
+      b.stPunchActive = false;
+      b.stBoltOn = false;
+      return;
+    }
+
+    if (b.phase === 1) {
+      if (b.stState === 'idle') {
+        b.stAttackT -= dt;
+        if (b.stAttackT <= 0) {
+          const type = b.stPattern++ % 3;
+          b.timer = 0;
+          if (type === 0) {
+            b.stState = 'stHairWind';
+            b.stBoltX = clamp(hero.x, 90, W - 90);
+            b.stBoltY = hero.y - 40;
+            spawnComic('ВОЛОСЫ-МОЛНИИ!', b.x - 100, 150, 19, '#9ce8ff');
+          } else if (type === 1) {
+            b.stState = 'stVehicleWind';
+            spawnComic('ТРАНСПОРТ С ПРАВА!', W - 210, 170, 19, GOLD_BRIGHT);
+          } else {
+            b.stState = 'stPunchWind';
+            b.stPunchP = 0;
+            spawnComic('СТЕПА БЬЁТ!', b.x - 90, 165, 19, GOLD_BRIGHT);
+          }
+          Sound.sfx('telegraph');
+        }
+      } else if (b.stState === 'stHairWind') {
+        b.stHairSpark = 1;
+        if (b.timer >= 0.82) {
+          b.stState = 'stHairFire';
+          b.timer = 0;
+          b.stBoltOn = true;
+          Sound.sfx('chalk');
+          game.shake = Math.max(game.shake, 5);
+        }
+      } else if (b.stState === 'stHairFire') {
+        b.stBoltOn = true;
+        if (b.timer >= 0.36) {
+          b.stBoltOn = false;
+          b.stState = 'stHairRecover';
+          b.timer = 0;
+        }
+      } else if (b.stState === 'stHairRecover') {
+        if (b.timer >= 0.42) stepaToIdle(1.35);
+      } else if (b.stState === 'stVehicleWind') {
+        if (b.timer >= 0.72) {
+          spawnStepaVehicle();
+          b.stState = 'stVehicleRecover';
+          b.timer = 0;
+        }
+      } else if (b.stState === 'stVehicleRecover') {
+        if (b.timer >= 0.55) stepaToIdle(1.3);
+      } else if (b.stState === 'stPunchWind') {
+        b.stPunchP = clamp(b.timer / 0.62, 0, 1) * 0.12;
+        if (b.timer >= 0.62) {
+          b.stState = 'stPunchOut';
+          b.timer = 0;
+          b.stPunchActive = true;
+          b.stPunchP = 0.12;
+          Sound.sfx('punch');
+        }
+      } else if (b.stState === 'stPunchOut') {
+        b.stPunchP = lerp(0.12, 1, easeOutCubic(clamp(b.timer / 0.2, 0, 1)));
+        if (b.timer >= 0.4) {
+          b.stState = 'stPunchRecover';
+          b.timer = 0;
+          b.stPunchActive = false;
+        }
+      } else if (b.stState === 'stPunchRecover') {
+        b.stPunchP = lerp(1, 0, easeInOutQuad(clamp(b.timer / 0.38, 0, 1)));
+        if (b.timer >= 0.38) stepaToIdle(1.25);
+      }
+      return;
+    }
+
+    // ---------- вторая фаза: бегущий скейт-парк ----------
+    if (b.stState === 'stRideStart') {
+      b.stTransition = true;
+      b.stRideStartT += dt;
+      if (b.stRideStartT >= 1.15) {
+        b.stState = 'stRide';
+        b.stTransition = false;
+        b.stScrollT = 0;
+        b.stAttackT = 1.7;
+        b.stPlatT = 0.4;
+        b.stHazardT = 0.8;
+        spawnComic('ДОГОНЯЙ!', W / 2, 160, 24, GOLD_BRIGHT);
+      }
+      return;
+    }
+
+    if (b.stState === 'stCrash') {
+      b.stCrashT += dt;
+      if (b.stCrashT >= 1.15) {
+        b.hp = 0;
+        startBossDeath();
+      }
+      return;
+    }
+
+    if (b.stState === 'stRide') {
+      b.stScrollT += dt;
+      b.stScrollSpeed = Math.min(345, 190 + b.stScrollT * 9);
+      const dx = b.stScrollSpeed * dt;
+      b.stScrollDist += dx;
+      game.stepaScrollDist = b.stScrollDist;
+      // Мир едет навстречу герою.
+      for (let i = platforms.length - 1; i >= 0; i--) {
+        const p = platforms[i];
+        p.x -= dx;
+        if (p.x < -160) platforms.splice(i, 1);
+      }
+      b.stPlatT -= dt;
+      if (b.stPlatT <= 0 && platforms.length < 5) {
+        spawnStepaScrollPlatform();
+        b.stPlatT = rand(1.15, 1.8);
+      }
+      b.stHazardT -= dt;
+      if (b.stHazardT <= 0) {
+        spawnStepaScooter();
+        b.stHazardT = rand(0.95, 1.45) * difficultyConfig().wait;
+      }
+      b.stAttackT -= dt;
+      if (b.stAttackT <= 0) {
+        b.stAttackT = 2.15 * difficultyConfig().wait;
+        b.stBoltX = clamp(hero.x, 100, W - 100);
+        b.stBoltY = hero.y - 40;
+        bossShots.push({
+          kind: 'stepaHairBolt',
+          x1: W - 110,
+          y1: GROUND - 300,
+          x2: b.stBoltX,
+          y2: b.stBoltY,
+          r: 16,
+          t: 0,
+          life: 0.34,
+          spin: 0,
+          dir: -1,
+        });
+        Sound.sfx('chalk');
+      }
+      b.x = W - 108;
+      b.face = -1;
+      if (!b.stExit && b.stScrollDist >= 2750) {
+        b.stExit = true;
+        b.stState = 'stCrash';
+        b.stCrashT = 0;
+        b.stBoltOn = false;
+        game.stepaScroll = false;
+        game.shake = Math.max(game.shake, 18);
+        game.flash = Math.max(game.flash, 0.3);
+        spawnComic('ВЫХОД!', W / 2, 160, 30, GOLD_BRIGHT);
+        spawnComic('СТЕПА ВРЕЗАЕТСЯ!', W / 2, 204, 17, CREAM);
+        Sound.sfx('slam');
+      }
+    }
+  }
+
+  function drawStepaHairBolt(x1, y1, x2, y2, alpha = 1) {
+    const t = game.time;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const points = [];
+    const segs = 9;
+    for (let i = 0; i <= segs; i++) {
+      const k = i / segs;
+      const jag = i === 0 || i === segs ? 0 : Math.sin(t * 42 + i * 2.7) * 13;
+      points.push({ x: lerp(x1, x2, k) + nx * jag, y: lerp(y1, y2, k) + ny * jag });
+    }
+    for (const pass of [
+      { color: 'rgba(120, 230, 255, 0.22)', width: 24 },
+      { color: 'rgba(140, 240, 255, 0.65)', width: 9 },
+      { color: '#f4ffff', width: 3 },
+    ]) {
+      ctx.strokeStyle = pass.color;
+      ctx.lineWidth = pass.width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(190, 250, 255, 0.7)';
+    for (let i = 1; i < points.length - 1; i += 2) {
+      circle(ctx, points[i].x, points[i].y, 3.5, 'rgba(210, 252, 255, 0.75)', null, 0);
+    }
+    ctx.restore();
+  }
+
+  function drawNikitaStepaShot(s) {
+    if (s.kind === 'nikitaPhone') {
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.spin);
+      ctx.fillStyle = 'rgba(126, 224, 255, 0.18)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 34, 0, TAU);
+      ctx.fill();
+      roundRect(ctx, -18, -28, 36, 56, 8);
+      fillStroke(ctx, '#181b22', INK, 3);
+      ctx.fillStyle = '#7ee0ff';
+      roundRect(ctx, -13, -20, 26, 38, 4);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.fillRect(-9, -16, 18, 3);
+      ctx.fillStyle = '#d9e9ef';
+      circle(ctx, 0, 22, 2.6, '#d9e9ef', null, 0);
+      ctx.restore();
+      return;
+    }
+    if (s.kind === 'bikeWheel') {
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.spin);
+      circle(ctx, 0, 0, 36, '#2b2727', INK, 4);
+      circle(ctx, 0, 0, 28, 'rgba(210, 205, 190, 0.18)', null, 0);
+      ctx.strokeStyle = '#b9b3a4';
+      ctx.lineWidth = 2.2;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a) * 29, Math.sin(a) * 29);
+        ctx.stroke();
+      }
+      circle(ctx, 0, 0, 6, '#9a9489', INK, 2);
+      ctx.restore();
+      return;
+    }
+    const scooter = s.kind === 'stepaScooter' || s.vehicle === 'scooter';
+    const bike = s.vehicle === 'bike';
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    // тень
+    ctx.fillStyle = 'rgba(20, 16, 14, 0.25)';
+    ctx.beginPath();
+    ctx.ellipse(0, 28, 42, 7, 0, 0, TAU);
+    ctx.fill();
+    if (bike) {
+      drawBikeVector(ctx, -46, 0, 34, s.spin, 1);
+      drawBikeVector(ctx, 46, 0, 34, s.spin, 1);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(-46, 0);
+      ctx.lineTo(-10, -34);
+      ctx.lineTo(26, -34);
+      ctx.lineTo(46, 0);
+      ctx.moveTo(-10, -34);
+      ctx.lineTo(10, 0);
+      ctx.lineTo(-46, 0);
+      ctx.stroke();
+      ctx.strokeStyle = '#b23b32';
+      ctx.lineWidth = 3.4;
+      ctx.stroke();
+    } else if (scooter) {
+      roundRect(ctx, -40, 6, 76, 10, 5);
+      fillStroke(ctx, '#2c4b53', INK, 3);
+      circle(ctx, -30, 22, 13, '#2b2727', INK, 3);
+      circle(ctx, 30, 22, 13, '#2b2727', INK, 3);
+      ctx.strokeStyle = '#2c4b53';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(34, 8);
+      ctx.lineTo(42, -52);
+      ctx.stroke();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 10;
+      ctx.stroke();
+      ctx.strokeStyle = '#2c4b53';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(34, 8);
+      ctx.lineTo(42, -52);
+      ctx.stroke();
+      ctx.strokeStyle = '#3d3a38';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(27, -56);
+      ctx.lineTo(57, -56);
+      ctx.stroke();
+    } else {
+      // скейтборд
+      ctx.save();
+      ctx.rotate(-0.08);
+      roundRect(ctx, -48, 4, 96, 11, 5);
+      fillStroke(ctx, '#b94835', INK, 3);
+      circle(ctx, -31, 22, 12, '#2b2727', INK, 3);
+      circle(ctx, 31, 22, 12, '#2b2727', INK, 3);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function drawBikeVector(g, x, y, r, spin, scale = 1) {
+    g.save();
+    g.translate(x, y);
+    g.rotate(spin);
+    circle(g, 0, 0, r, '#2a2626', INK, 3.4);
+    circle(g, 0, 0, r * 0.74, 'rgba(230, 225, 210, 0.15)', null, 0);
+    g.strokeStyle = '#bdb6a6';
+    g.lineWidth = 1.8;
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * TAU;
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.lineTo(Math.cos(a) * r * 0.76, Math.sin(a) * r * 0.76);
+      g.stroke();
+    }
+    circle(g, 0, 0, r * 0.16, '#999183', INK, 1.8);
+    g.restore();
+  }
+
+  function drawStepaBoy(g, t, opts = {}) {
+    const face = opts.face || -1;
+    const scale = opts.scale || 1;
+    const walk = opts.walk || 0;
+    const carry = !!opts.carry;
+    const battered = !!opts.battered;
+    const armsUp = !!opts.armsUp;
+    const glow = opts.hairGlow || 0;
+    const slouch = opts.slouch === undefined ? 1 : opts.slouch;
+    g.save();
+    g.scale(face * scale, scale);
+    const bob = opts.bob === undefined ? Math.sin(t * 2.2) * 1.5 : opts.bob;
+    const legA = Math.sin(walk) * 0.55;
+    const legB = -Math.sin(walk) * 0.55;
+    // ноги
+    g.strokeStyle = '#27313c';
+    g.lineWidth = 20;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-14, -120);
+    g.lineTo(-18 + Math.sin(legA) * 20, -8);
+    g.moveTo(14, -120);
+    g.lineTo(18 + Math.sin(legB) * 20, -8);
+    g.stroke();
+    g.fillStyle = '#241b18';
+    roundRect(g, -32, -12, 28, 11, 4);
+    fillStroke(g, '#241b18', INK, 2);
+    roundRect(g, 8, -12, 30, 11, 4);
+    fillStroke(g, '#241b18', INK, 2);
+    // туловище — белая рубашка, сутулая
+    g.save();
+    g.translate(slouch * 9, bob);
+    g.rotate(slouch * 0.1);
+    roundRect(g, -35, -258, 70, 142, 22);
+    fillStroke(g, battered ? '#d8d0bd' : '#f3eee0', INK, 4);
+    g.fillStyle = 'rgba(120, 100, 80, 0.18)';
+    roundRect(g, -27, -246, 17, 92, 8);
+    g.fill();
+    // воротник
+    g.fillStyle = '#e2dbc9';
+    g.beginPath();
+    g.moveTo(-20, -258);
+    g.lineTo(0, -238);
+    g.lineTo(20, -258);
+    g.closePath();
+    fillStroke(g, '#e2dbc9', INK, 1.8);
+    // галстук
+    g.fillStyle = '#3f5f56';
+    g.beginPath();
+    g.moveTo(-5, -250);
+    g.lineTo(5, -250);
+    g.lineTo(7, -224);
+    g.lineTo(0, -212);
+    g.lineTo(-7, -224);
+    g.closePath();
+    fillStroke(g, '#3f5f56', INK, 1.6);
+    if (battered) {
+      g.strokeStyle = 'rgba(70, 50, 40, 0.7)';
+      g.lineWidth = 2.5;
+      g.beginPath();
+      g.moveTo(-22, -212);
+      g.lineTo(11, -192);
+      g.moveTo(-4, -236);
+      g.lineTo(23, -222);
+      g.stroke();
+    }
+    // руки
+    const shoulderY = -236;
+    g.strokeStyle = INK;
+    g.lineWidth = 19;
+    g.lineCap = 'round';
+    g.beginPath();
+    if (armsUp) {
+      g.moveTo(-24, shoulderY);
+      g.quadraticCurveTo(-42, shoulderY - 42, -58, shoulderY - 68);
+      g.moveTo(24, shoulderY);
+      g.quadraticCurveTo(42, shoulderY - 42, 58, shoulderY - 68);
+    } else {
+      g.moveTo(-24, shoulderY);
+      g.quadraticCurveTo(-46, shoulderY + 42, -34, shoulderY + 72);
+      g.moveTo(24, shoulderY);
+      g.quadraticCurveTo(40, shoulderY + 46, 30, shoulderY + 76);
+    }
+    g.stroke();
+    g.strokeStyle = '#f3eee0';
+    g.lineWidth = 13;
+    g.stroke();
+    g.fillStyle = SKIN;
+    if (armsUp) {
+      circle(g, -60, shoulderY - 70, 9, SKIN, INK, 2.2);
+      circle(g, 60, shoulderY - 70, 9, SKIN, INK, 2.2);
+    } else {
+      circle(g, -34, shoulderY + 76, 9, SKIN, INK, 2.2);
+      circle(g, 30, shoulderY + 80, 9, SKIN, INK, 2.2);
+    }
+    // голова
+    const headY = -300;
+    g.save();
+    if (glow > 0) {
+      const grd = g.createRadialGradient(0, headY - 20, 6, 0, headY - 20, 62);
+      grd.addColorStop(0, 'rgba(150, 240, 255, 0.4)');
+      grd.addColorStop(1, 'rgba(150, 240, 255, 0)');
+      g.fillStyle = grd;
+      g.beginPath();
+      g.arc(0, headY - 20, 62, 0, TAU);
+      g.fill();
+    }
+    circle(g, 0, headY, 28, SKIN, INK, 4);
+    // кудри
+    g.fillStyle = '#2a1d18';
+    for (let i = 0; i < 11; i++) {
+      const a = -Math.PI * 0.98 + (i / 10) * Math.PI * 0.96;
+      const r = 10 + (i % 3) * 2.4;
+      circle(g, Math.cos(a) * 27, headY - 12 + Math.sin(a) * 25, r, '#2a1d18', INK, 2);
+    }
+    // глаза и рот
+    g.fillStyle = CREAM;
+    ellipsePath(g, -10, headY - 2, 7, 4.6);
+    g.fill();
+    ellipsePath(g, 10, headY - 2, 7, 4.6);
+    g.fill();
+    g.fillStyle = INK;
+    circle(g, -8, headY - 1, 2.2, INK, null, 0);
+    circle(g, 12, headY - 1, 2.2, INK, null, 0);
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(-9, headY + 13);
+    g.quadraticCurveTo(0, headY + 18, 10, headY + 12);
+    g.stroke();
+    if (glow > 0) {
+      g.strokeStyle = `rgba(160, 245, 255, ${0.5 + glow * 0.5})`;
+      g.lineWidth = 2.4;
+      for (let i = 0; i < 5; i++) {
+        const a = -Math.PI * 0.8 + i * 0.35;
+        g.beginPath();
+        g.moveTo(Math.cos(a) * 34, headY - 22 + Math.sin(a) * 30);
+        g.lineTo(Math.cos(a) * 48 + Math.sin(t * 20 + i) * 6, headY - 24 + Math.sin(a) * 44);
+        g.stroke();
+      }
+    }
+    g.restore();
+    g.restore();
+    if (carry) {
+      // Никита сидит на плечах Степы, а не стоит рядом. Координаты
+      // локальные: Степа уже зеркалится по направлению взгляда.
+      drawNikitaKid(g, t, {
+        x: 28,
+        y: -230,
+        scale: 0.6,
+        riding: true,
+        face: 1,
+        bob: Math.sin(t * 2.6) * 1.2,
+      });
+    }
+    g.restore();
+  }
+
+  function drawNikitaKid(g, t, opts = {}) {
+    const scale = opts.scale || 1;
+    const face = opts.face || 1;
+    g.save();
+    g.translate(opts.x || 0, opts.y || 0);
+    g.scale(face * scale, scale);
+    const bob = opts.bob === undefined ? Math.sin(t * 2.6) * 1.2 : opts.bob;
+    // ноги
+    g.strokeStyle = '#2a2a36';
+    g.lineWidth = 15;
+    g.lineCap = 'round';
+    g.beginPath();
+    if (opts.riding) {
+      g.moveTo(-10, -64);
+      g.lineTo(-34, -16);
+      g.moveTo(10, -64);
+      g.lineTo(30, -16);
+    } else {
+      g.moveTo(-10, -66);
+      g.lineTo(-14, -4);
+      g.moveTo(10, -66);
+      g.lineTo(16, -4);
+    }
+    g.stroke();
+    g.fillStyle = '#1c1718';
+    roundRect(g, -28, -8, 25, 10, 4);
+    fillStroke(g, '#1c1718', INK, 2);
+    roundRect(g, 4, -8, 27, 10, 4);
+    fillStroke(g, '#1c1718', INK, 2);
+    // тело — тёмная куртка
+    roundRect(g, -26, -136 + bob, 52, 78, 15);
+    fillStroke(g, '#333a4c', INK, 3.4);
+    g.fillStyle = 'rgba(126, 224, 255, 0.35)';
+    roundRect(g, -18, -126 + bob, 36, 12, 5);
+    g.fill();
+    // руки
+    g.strokeStyle = INK;
+    g.lineWidth = 14;
+    g.beginPath();
+    g.moveTo(-22, -124 + bob);
+    g.lineTo(-34, -84 + bob);
+    g.moveTo(22, -124 + bob);
+    g.lineTo(34, -86 + bob);
+    g.stroke();
+    g.strokeStyle = '#333a4c';
+    g.lineWidth = 9;
+    g.stroke();
+    g.fillStyle = SKIN;
+    circle(g, -35, -80 + bob, 6, SKIN, INK, 2);
+    circle(g, 35, -82 + bob, 6, SKIN, INK, 2);
+    // телефон
+    roundRect(g, 31, -92 + bob, 13, 22, 3);
+    fillStroke(g, '#111', '#7ee0ff', 1.6);
+    // голова
+    const hy = -158 + bob;
+    circle(g, 0, hy, 23, SKIN, INK, 3.2);
+    g.fillStyle = '#241a18';
+    g.beginPath();
+    g.moveTo(-24, hy - 8);
+    g.quadraticCurveTo(-16, hy - 35, 9, hy - 27);
+    g.quadraticCurveTo(25, hy - 20, 22, hy - 4);
+    g.quadraticCurveTo(2, hy - 18, -12, hy - 5);
+    g.closePath();
+    fillStroke(g, '#241a18', INK, 2.4);
+    g.fillStyle = INK;
+    circle(g, -7, hy, 2, INK, null, 0);
+    circle(g, 7, hy, 2, INK, null, 0);
+    g.strokeStyle = INK;
+    g.lineWidth = 1.8;
+    g.beginPath();
+    g.moveTo(-6, hy + 11);
+    g.quadraticCurveTo(0, hy + 14, 7, hy + 10);
+    g.stroke();
+    g.restore();
+  }
+
+  function drawNikitaHallway() {
+    const t = game.time;
+    const dark = boss.phase === 2;
+    const wall = ctx.createLinearGradient(0, 0, 0, GROUND);
+    wall.addColorStop(0, dark ? '#17191b' : '#1c1e20');
+    wall.addColorStop(0.5, dark ? '#222526' : '#292b2a');
+    wall.addColorStop(1, '#171513');
+    ctx.fillStyle = wall;
+    ctx.fillRect(0, 0, W, GROUND);
+    // потолок
+    ctx.fillStyle = '#101112';
+    ctx.fillRect(0, 0, W, 38);
+    // панель
+    ctx.fillStyle = '#263a35';
+    ctx.fillRect(0, 390, W, GROUND - 390);
+    ctx.fillStyle = 'rgba(255, 235, 190, 0.08)';
+    ctx.fillRect(0, 396, W, 4);
+    // пол
+    const floor = ctx.createLinearGradient(0, GROUND, 0, H);
+    floor.addColorStop(0, '#2b2420');
+    floor.addColorStop(1, '#0d0b0a');
+    ctx.fillStyle = floor;
+    ctx.fillRect(0, GROUND, W, H - GROUND);
+    // шкафчики
+    for (const side of [0, 1]) {
+      const x0 = side ? W - 250 : 26;
+      for (let i = 0; i < 4; i++) {
+        const x = x0 + (side ? i * 54 : i * 54);
+        roundRect(ctx, x, 322, 44, 228, 4);
+        fillStroke(ctx, i % 2 ? '#334344' : '#2d3b3d', INK, 2.2);
+        ctx.fillStyle = 'rgba(210, 220, 210, 0.18)';
+        ctx.fillRect(x + 6, 334, 32, 3);
+        circle(ctx, x + 22, 438, 2.2, '#aeb8b2', null, 0);
+      }
+    }
+    // двери
+    for (const x of [315, 790, 1150]) {
+      roundRect(ctx, x - 58, 342, 116, 268, 5);
+      fillStroke(ctx, '#2f2622', INK, 3);
+      roundRect(ctx, x - 49, 352, 98, 248, 4);
+      fillStroke(ctx, x === 1150 ? '#17161b' : '#49372b', '#6b5337', 2);
+      circle(ctx, x + 38, 484, 3, GOLD, INK, 1.4);
+      if (x !== 1150) {
+        ctx.fillStyle = 'rgba(230, 214, 170, 0.25)';
+        roundRect(ctx, x - 34, 372, 68, 26, 3);
+        ctx.fill();
+      }
+    }
+    // лампа
+    const lampGlow = ctx.createRadialGradient(640, 50, 8, 640, 50, 280);
+    lampGlow.addColorStop(0, 'rgba(255, 232, 170, 0.22)');
+    lampGlow.addColorStop(1, 'rgba(255, 232, 170, 0)');
+    ctx.fillStyle = lampGlow;
+    ctx.beginPath();
+    ctx.arc(640, 50, 280, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#d8c799';
+    ctx.fillRect(600, 18, 80, 7);
+    // табличка тёмного кабинета
+    ctx.save();
+    roundRect(ctx, 1076, 242, 148, 32, 5);
+    fillStroke(ctx, 'rgba(14, 13, 15, 0.94)', 'rgba(150, 220, 190, 0.45)', 1.4);
+    ctx.fillStyle = '#cde7d9';
+    ctx.font = `900 12px ${FONT_DISPLAY}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ТЁМНЫЙ КАБИНЕТ', 1150, 258);
+    ctx.restore();
+    // трещины/пыль
+    ctx.strokeStyle = 'rgba(230, 220, 200, 0.08)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 5; i++) {
+      const x = 120 + seeded(i * 4.3) * 1040;
+      ctx.beginPath();
+      ctx.moveTo(x, 60);
+      ctx.lineTo(x + 12, 130);
+      ctx.lineTo(x - 5, 190);
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255, 240, 210, 0.35)';
+    for (let i = 0; i < 28; i++) {
+      const x = (seeded(i * 3.7) * W + t * (6 + (i % 4) * 4)) % W;
+      const y = 90 + ((seeded(i * 6.1) * 430 + t * (7 + (i % 5) * 6)) % 430);
+      ctx.fillRect(x, y, 1.4, 1.4);
+    }
+  }
+
+  function drawNikitaAtmosphere() {
+    const dark = boss.phase === 2 ? 0.36 : 0.26;
+    const vig = ctx.createRadialGradient(W / 2, 330, 160, W / 2, 330, 780);
+    vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vig.addColorStop(1, `rgba(3, 5, 6, ${dark})`);
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, W, H);
+    if (boss.nkBgFistActive) {
+      ctx.fillStyle = 'rgba(120, 200, 220, 0.06)';
+      ctx.fillRect(0, 0, W, GROUND);
+    }
+  }
+
+  function drawStepaSkatePark() {
+    const t = game.time;
+    const scroll = game.stepaScroll ? game.stepaScrollDist : 0;
+    const sky = ctx.createLinearGradient(0, 0, 0, GROUND);
+    sky.addColorStop(0, '#2b5f77');
+    sky.addColorStop(0.55, '#7fa6a1');
+    sky.addColorStop(1, '#e0b06c');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, GROUND);
+    // солнце
+    ctx.fillStyle = 'rgba(255, 224, 150, 0.9)';
+    ctx.beginPath();
+    ctx.arc(1010, 130, 42, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 224, 150, 0.14)';
+    ctx.beginPath();
+    ctx.arc(1010, 130, 110, 0, TAU);
+    ctx.fill();
+    // дальние дома
+    for (let i = 0; i < 12; i++) {
+      const span = W + 500;
+      const x = ((i * 147 - scroll * 0.18 + seeded(i * 3.1) * 200) % span + span) % span - 250;
+      const bh = 150 + seeded(i * 5.7) * 130;
+      ctx.fillStyle = i % 2 ? 'rgba(54, 74, 73, 0.55)' : 'rgba(66, 84, 79, 0.5)';
+      ctx.fillRect(x, GROUND - 120 - bh, 90, bh);
+      ctx.fillStyle = 'rgba(255, 225, 160, 0.22)';
+      for (let w = 0; w < 3; w++) ctx.fillRect(x + 12 + w * 24, GROUND - 100 - bh + 20, 12, 16);
+    }
+    // забор
+    ctx.strokeStyle = 'rgba(70, 65, 58, 0.6)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 30; i++) {
+      const x = ((i * 56 - scroll * 0.5) % (W + 120) + W + 120) % (W + 120) - 60;
+      ctx.beginPath();
+      ctx.moveTo(x, 470);
+      ctx.lineTo(x, 540);
+      ctx.stroke();
+    }
+    // асфальт
+    const groundGrad = ctx.createLinearGradient(0, 540, 0, H);
+    groundGrad.addColorStop(0, '#756f63');
+    groundGrad.addColorStop(1, '#373631');
+    ctx.fillStyle = groundGrad;
+    ctx.fillRect(0, 540, W, H - 540);
+    ctx.fillStyle = 'rgba(255, 238, 190, 0.12)';
+    ctx.fillRect(0, 540, W, 4);
+    // разметка
+    ctx.strokeStyle = 'rgba(240, 230, 200, 0.22)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 14; i++) {
+      const x = ((i * 110 - scroll) % (W + 140) + W + 140) % (W + 140) - 70;
+      ctx.beginPath();
+      ctx.moveTo(x, 642);
+      ctx.lineTo(x + 52, 642);
+      ctx.stroke();
+    }
+    // рампы и перила
+    const rampOffset = scroll % 420;
+    for (let i = -1; i < 5; i++) {
+      const x = i * 420 - rampOffset + 90;
+      // рампа
+      ctx.beginPath();
+      ctx.moveTo(x, 600);
+      ctx.lineTo(x + 128, 548);
+      ctx.lineTo(x + 214, 548);
+      ctx.lineTo(x + 214, 600);
+      ctx.closePath();
+      fillStroke(ctx, '#9a8564', INK, 4);
+      ctx.strokeStyle = 'rgba(255, 240, 200, 0.24)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 10, 594);
+      ctx.lineTo(x + 130, 546);
+      ctx.stroke();
+      // перила
+      ctx.strokeStyle = '#39474b';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(x + 250, 600);
+      ctx.lineTo(x + 250, 512);
+      ctx.lineTo(x + 380, 512);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(200, 230, 230, 0.3)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    // выход
+    const exitVisible = !game.stepaScroll && boss.phase === 2 || (boss.phase === 2 && game.stepaScrollDist > 2100);
+    if (exitVisible) {
+      const ex = game.stepaScroll ? clamp(W - 120 - (2750 - game.stepaScrollDist) * 0.4, 860, W - 80) : W - 170;
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = GOLD_BRIGHT;
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(ex - 110, 600);
+      ctx.lineTo(ex - 110, 330);
+      ctx.lineTo(ex + 110, 330);
+      ctx.lineTo(ex + 110, 600);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(24, 12, 16, 0.8)';
+      roundRect(ctx, ex - 124, 288, 248, 40, 7);
+      fillStroke(ctx, 'rgba(24, 12, 16, 0.9)', GOLD_BRIGHT, 2);
+      ctx.fillStyle = GOLD_BRIGHT;
+      ctx.font = `900 21px ${FONT_DISPLAY}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('ВЫХОД', ex, 309);
+      ctx.restore();
+    }
+    if (game.stepaScroll) {
+      // линии скорости
+      ctx.strokeStyle = 'rgba(255, 250, 230, 0.18)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 11; i++) {
+        const y = 120 + i * 39;
+        const x = W - ((t * (420 + i * 35)) % (W + 180));
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 120 + (i % 4) * 40, y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawStepaAtmosphere() {
+    const vig = ctx.createRadialGradient(W / 2, 330, 180, W / 2, 330, 820);
+    vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vig.addColorStop(1, 'rgba(10, 8, 6, 0.25)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, W, H);
+    if (boss.stBoltOn || boss.stHairSpark > 0.2) {
+      ctx.fillStyle = 'rgba(130, 235, 255, 0.05)';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  function drawNewBossWarnings() {
+    if (game.bossId === 'nikita' && boss.phase === 2 && boss.nkBgFistActive) {
+      const p = clamp(boss.nkBgPunchP, 0, 2);
+      if (p > 0.1 && p < 1.45) {
+        ctx.save();
+        const a = 0.4 + Math.sin(game.time * 12) * 0.2;
+        ctx.globalAlpha = a;
+        ctx.strokeStyle = '#9ce8ff';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 8]);
+        ctx.beginPath();
+        ctx.moveTo(boss.nkBgPunchX, 58);
+        ctx.lineTo(boss.nkBgPunchX, GROUND - 160);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    }
+    if (game.bossId === 'stepa' && boss.phase === 2) {
+      const total = 2750;
+      const frac = clamp(boss.stScrollDist / total, 0, 1);
+      ctx.save();
+      roundRect(ctx, W / 2 - 180, 118, 360, 32, 8);
+      fillStroke(ctx, 'rgba(20, 14, 12, 0.82)', 'rgba(211, 160, 74, 0.45)', 1.2);
+      ctx.fillStyle = 'rgba(244, 227, 189, 0.7)';
+      ctx.font = `700 9px Verdana, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(boss.stState === 'stCrash' ? 'СТЕПА ВРЕЗАЛСЯ!' : 'ДО ВЫХОДА', W / 2, 128);
+      roundRect(ctx, W / 2 - 160, 134, 320 * frac, 7, 3);
+      fillStroke(ctx, boss.stState === 'stCrash' ? GOLD_BRIGHT : '#8fd8c4', null, 0);
+      ctx.restore();
+    }
+  }
+
+  function drawNikitaBoss() {
+    const b = boss;
+    const t = game.time;
+    if (b.dying) {
+      // Никита лежит, Степа убегает вправо.
+      ctx.save();
+      ctx.translate(b.x, GROUND);
+      drawNikitaKid(ctx, t, { x: 0, y: 0, scale: 1.05, riding: true, face: -1, bob: 0 });
+      ctx.restore();
+      const fleeX = b.x + 140 + b.deathT * 250;
+      if (fleeX < W + 140) {
+        ctx.save();
+        ctx.translate(fleeX, GROUND);
+        drawStepaBoy(ctx, t, {
+          face: 1,
+          scale: 0.96,
+          walk: t * 15,
+          battered: true,
+          slouch: 0.7,
+        });
+        ctx.restore();
+        spawnDust(fleeX, GROUND, 0.2, 0.3);
+      }
+      ctx.save();
+      ctx.fillStyle = 'rgba(20, 14, 12, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(b.x, GROUND + 2, 80, 14, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    if (b.phase === 1) {
+      let stepaX = b.x;
+      let alpha = 1;
+      let bob = 0;
+      if (b.nkState === 'nkIntro') {
+        const p = easeOutCubic(clamp(b.timer / 1.5, 0, 1));
+        stepaX = lerp(W + 170, b.x, p);
+        alpha = 1;
+      }
+      const running = b.nkState === 'nkIntro';
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(stepaX, GROUND);
+      drawStepaBoy(ctx, t, {
+        face: -1,
+        scale: 1.08,
+        walk: running ? t * 22 : 0,
+        carry: true,
+        slouch: running ? 1.15 : 1,
+        bob,
+      });
+      ctx.restore();
+      // рука Степы в ударе
+      if (b.nkPunchActive || b.nkState === 'nkPunchOut' || b.nkState === 'nkPunchRecover') {
+        const reach = 300 * clamp(b.nkPunchP, 0, 1);
+        ctx.save();
+        ctx.translate(stepaX, GROUND - 236);
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 30;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-28 - reach * 0.65, 16);
+        ctx.stroke();
+        ctx.strokeStyle = '#f3eee0';
+        ctx.lineWidth = 22;
+        ctx.stroke();
+        ctx.fillStyle = SKIN;
+        ellipsePath(ctx, -36 - reach, 22, 27, 22, 0.2);
+        fillStroke(ctx, SKIN, INK, 3.5);
+        ctx.strokeStyle = 'rgba(255, 240, 200, 0.3)';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath();
+          ctx.moveTo(-70 - reach - i * 20, 2 + i * 16);
+          ctx.lineTo(-126 - reach - i * 26, 2 + i * 16);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      return;
+    }
+
+    // ---------- вторая фаза ----------
+    if (b.nkState === 'nkFlee') {
+      // Степа бросает Никиту и убегает вправо, Никита падает сверху.
+      const fleeX = b.x + 20 + b.timer * 260;
+      ctx.save();
+      ctx.translate(fleeX, GROUND);
+      drawStepaBoy(ctx, t, {
+        face: 1,
+        scale: 1.02,
+        walk: t * 20,
+        battered: true,
+        slouch: 0.75,
+      });
+      ctx.restore();
+      const fp = clamp(b.timer / 1.55, 0, 1);
+      const fallY = lerp(-130, GROUND, fp * fp);
+      ctx.save();
+      ctx.translate(W / 2, fallY);
+      drawNikitaKid(ctx, t, { x: 0, y: 0, scale: 1.05, face: 1, riding: false, bob: 0 });
+      ctx.restore();
+      return;
+    }
+
+    if (b.nkState === 'nkFall' || b.nkState === 'nkWheelFly' || b.nkState === 'nkBikeBuild') {
+      const fallY = GROUND;
+      ctx.save();
+      ctx.translate(W / 2, fallY);
+      drawNikitaKid(ctx, t, { x: 0, y: 0, scale: 1.05, face: 1, riding: b.nkState !== 'nkFall', bob: 0 });
+      ctx.restore();
+      if (b.nkState === 'nkWheelFly' || b.nkState === 'nkBikeBuild') {
+        const wheelP = b.nkState === 'nkWheelFly' ? clamp(b.timer / 0.85, 0, 1) : 1;
+        const wx = lerp(-80, W / 2 - 50, easeOutCubic(wheelP));
+        const wy = lerp(-80, GROUND - 36, easeInCubic(wheelP));
+        ctx.save();
+        ctx.translate(wx, wy);
+        ctx.rotate(t * 8);
+        drawBikeVector(ctx, 0, 0, 36, 0, 1);
+        ctx.restore();
+      }
+      if (b.nkState === 'nkBikeBuild') {
+        drawBikeVector(ctx, W / 2 - 50, GROUND - 36, 34, t * 3, 1);
+        drawBikeVector(ctx, W / 2 + 50, GROUND - 36, 34, t * 3, 1);
+      }
+      return;
+    }
+
+    // езда на велосипеде
+    ctx.save();
+    ctx.translate(b.x, GROUND);
+    // тень уже нарисована в drawStage
+    // Весь велосипед с Никитой уменьшен вокруг уровня земли: его голова
+    // опускается до высоты, которую берёт обычный прыжок героя.
+    ctx.scale(NIKITA_RIDE_SCALE, NIKITA_RIDE_SCALE);
+    drawBikeVector(ctx, -50, -36, 34, b.nkRideT * 7.5, 1);
+    drawBikeVector(ctx, 50, -36, 34, b.nkRideT * 7.5, 1);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-50, -36);
+    ctx.lineTo(-12, -76);
+    ctx.lineTo(28, -76);
+    ctx.lineTo(50, -36);
+    ctx.moveTo(-12, -76);
+    ctx.lineTo(14, -36);
+    ctx.lineTo(-50, -36);
+    ctx.stroke();
+    ctx.strokeStyle = '#b23b32';
+    ctx.lineWidth = 3.4;
+    ctx.stroke();
+    ctx.strokeStyle = '#b23b32';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(28, -76);
+    ctx.lineTo(36, -112);
+    ctx.lineTo(50, -112);
+    ctx.stroke();
+    drawNikitaKid(ctx, t, {
+      x: 0,
+      y: -46,
+      scale: 1.0,
+      face: b.nkRideDir,
+      riding: true,
+      bob: Math.sin(t * 9) * 1.4,
+    });
+    // линии скорости
+    ctx.strokeStyle = 'rgba(255, 240, 200, 0.22)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-b.nkRideDir * (70 + i * 18), -34 - i * 20);
+      ctx.lineTo(-b.nkRideDir * (130 + i * 24), -34 - i * 20);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // рука Степы сверху
+    if (b.nkBgFistActive) {
+      const p = clamp(b.nkBgPunchP, 0, 2);
+      const k = p <= 1 ? easeOutCubic(p) : easeInCubic(2 - p);
+      const fy = lerp(-80, GROUND - 150, k);
+      // На заднем плане появляется сам Степа — видно, чей это кулак.
+      const bgStepX = W / 2;
+      const bgStepFeet = 352;
+      const bgStepScale = 0.62;
+      ctx.save();
+      ctx.globalAlpha = 0.34;
+      ctx.fillStyle = '#0d0b0c';
+      ctx.beginPath();
+      ctx.ellipse(bgStepX, bgStepFeet + 2, 44, 8, 0, 0, TAU);
+      ctx.fill();
+      ctx.translate(bgStepX, bgStepFeet);
+      drawStepaBoy(ctx, t, {
+        face: 1,
+        scale: bgStepScale,
+        walk: 0,
+        battered: true,
+        armsUp: true,
+        slouch: 0.7,
+        bob: 0,
+      });
+      ctx.restore();
+      // Рукав тянется от Степы на заднем плане к кулаку.
+      const sx = bgStepX;
+      const sy = bgStepFeet - 236 * bgStepScale - 18;
+      const ex = b.nkBgPunchX;
+      const ey = fy - 18;
+      const midX = (sx + ex) / 2;
+      const midY = (sy + ey) / 2 - 34;
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 44;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.quadraticCurveTo(midX, midY, ex, ey);
+      ctx.stroke();
+      ctx.strokeStyle = '#f3eee0';
+      ctx.lineWidth = 31;
+      ctx.stroke();
+      ctx.translate(ex, fy);
+      // манжета
+      circle(ctx, 0, -24, 25, '#e2dbc9', INK, 3);
+      ctx.fillStyle = SKIN;
+      ellipsePath(ctx, 0, 0, 54, 44);
+      fillStroke(ctx, SKIN, INK, 4);
+      // пальцы, чтобы кулак не читался как палец
+      ctx.strokeStyle = 'rgba(120, 70, 50, 0.55)';
+      ctx.lineWidth = 3;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * 19, 26);
+        ctx.quadraticCurveTo(i * 19 + 5, 4, i * 19, -10);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(255, 235, 215, 0.28)';
+      ellipsePath(ctx, -28, -16, 13, 9, -0.4);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawStepaBoss() {
+    const b = boss;
+    const t = game.time;
+    if (b.dying) {
+      ctx.save();
+      ctx.translate(b.x, GROUND);
+      if (b.stState === 'stCrash') {
+        ctx.rotate(-0.12);
+        drawStepaBoy(ctx, t, {
+          face: -1,
+          scale: 1.0,
+          walk: 0,
+          battered: true,
+          armsUp: true,
+          slouch: 0.4,
+          bob: 0,
+        });
+        ctx.restore();
+        ctx.save();
+        ctx.translate(b.x, GROUND);
+        ctx.rotate(0.2);
+        roundRect(ctx, -90, -24, 180, 18, 8);
+        fillStroke(ctx, '#b94835', INK, 3);
+        ctx.restore();
+      } else {
+        ctx.rotate(0.32);
+        drawStepaBoy(ctx, t, {
+          face: -1,
+          scale: 1.0,
+          battered: true,
+          slouch: 0.5,
+          bob: 0,
+        });
+        ctx.restore();
+      }
+      return;
+    }
+
+    const riding = b.phase === 2;
+    ctx.save();
+    ctx.translate(b.x, GROUND);
+    if (riding) {
+      // скейтборд
+      ctx.save();
+      ctx.rotate(-0.06 + Math.sin(t * 8) * 0.02);
+      roundRect(ctx, -58, 8, 116, 12, 5);
+      fillStroke(ctx, '#b94835', INK, 3);
+      circle(ctx, -36, 26, 13, '#2b2727', INK, 3);
+      circle(ctx, 36, 26, 13, '#2b2727', INK, 3);
+      ctx.restore();
+      ctx.save();
+      ctx.rotate(-0.08);
+      drawStepaBoy(ctx, t, {
+        face: -1,
+        scale: 1.0,
+        walk: 0,
+        slouch: 0.55,
+        hairGlow: 0.5 + Math.sin(t * 14) * 0.2,
+        bob: Math.sin(t * 8) * 1.2,
+      });
+      ctx.restore();
+      // линии скорости
+      ctx.strokeStyle = 'rgba(255, 245, 210, 0.28)';
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(30 + i * 18, -40 - i * 24);
+        ctx.lineTo(100 + i * 26, -40 - i * 24);
+        ctx.stroke();
+      }
+    } else {
+      drawStepaBoy(ctx, t, {
+        face: -1,
+        scale: 1.06,
+        walk: 0,
+        slouch: 1.15,
+        hairGlow: b.stHairSpark > 0.2 || b.stBoltOn ? 1 : 0,
+        bob: Math.sin(t * 2.4) * 1.5,
+      });
+    }
+    ctx.restore();
+
+    // рука в ударе
+    if (b.stPunchActive || b.stState === 'stPunchOut' || b.stState === 'stPunchRecover') {
+      const reach = 290 * clamp(b.stPunchP, 0, 1);
+      ctx.save();
+      ctx.translate(b.x, GROUND - 208);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 32;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-24 - reach * 0.7, 14);
+      ctx.stroke();
+      ctx.strokeStyle = '#f3eee0';
+      ctx.lineWidth = 23;
+      ctx.stroke();
+      ctx.fillStyle = SKIN;
+      ellipsePath(ctx, -32 - reach, 20, 26, 21, 0.2);
+      fillStroke(ctx, SKIN, INK, 3.5);
+      ctx.restore();
+    }
+
+    // молния из волос в первой фазе
+    if (b.stBoltOn) {
+      const line = stepaHairLine();
+      drawStepaHairBolt(line.x1, line.y1, line.x2, line.y2, 1);
+    }
+  }
+
   // ================= ЕГОР: ЛЕС, ПАЛЬМА И ЧЕТЫРЕ ФАЗЫ =================
   function egorWaitTime() {
     return 2.1 * difficultyConfig().wait;
@@ -11061,9 +12949,11 @@
 
   function spawnEgorCoconutBomb() {
     const b = boss;
-    const fromX = b.x - 36;
-    const fromY = 322;
-    const fuse = 0.72;
+    // Кокосы вылетают по очереди из боковых пальм.
+    b.egorPalmSide = -(b.egorPalmSide || 1);
+    const fromX = b.egorPalmSide < 0 ? 132 : W - 132;
+    const fromY = 306;
+    const fuse = 0.86;
     const targetX = clamp(hero.x, ARENA_L + 40, ARENA_R - 40);
     const targetY = clamp(hero.y - 46, 190, GROUND - 80);
     const gravity = 700;
@@ -11081,9 +12971,10 @@
       t: 0,
       life: 4,
       spin: rand(0, TAU),
-      dir: -1,
+      dir: b.egorPalmSide < 0 ? 1 : -1,
+      fromPalm: true,
     });
-    spawnComic('КОКОС-БОМБА!', b.x - 170, 248, 18, GOLD_BRIGHT);
+    spawnComic('КОКОС С ПАЛЬМЫ!', fromX, 250, 17, GOLD_BRIGHT);
     Sound.sfx('shoot');
   }
 
@@ -11494,6 +13385,88 @@
       ctx.fill();
     }
 
+    if (game.bossId === 'egor' && boss.phase === 2) {
+      // Гигантское дерево, на котором сидит Егор.
+      const tx = boss.x;
+      ctx.save();
+      ctx.fillStyle = 'rgba(16, 26, 18, 0.34)';
+      ctx.beginPath();
+      ctx.ellipse(tx, 552, 178, 26, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(tx - 54, 560);
+      ctx.bezierCurveTo(tx - 30, 500, tx - 72, 450, tx - 38, 380);
+      ctx.quadraticCurveTo(tx - 20, 356, tx, 352);
+      ctx.quadraticCurveTo(tx + 22, 356, tx + 40, 380);
+      ctx.bezierCurveTo(tx + 76, 452, tx + 30, 500, tx + 56, 560);
+      ctx.closePath();
+      fillStroke(ctx, '#5b3c27', INK, 5);
+      ctx.strokeStyle = 'rgba(230, 190, 123, 0.24)';
+      ctx.lineWidth = 2.2;
+      for (let i = 0; i < 6; i++) {
+        ctx.beginPath();
+        ctx.moveTo(tx - 24 + i * 3, 536 - i * 29);
+        ctx.quadraticCurveTo(tx + 6, 520 - i * 29, tx + 32 + i * 2, 500 - i * 29);
+        ctx.stroke();
+      }
+      // ветка-сиденье
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 22;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(tx - 118, 372);
+      ctx.quadraticCurveTo(tx - 20, 356, tx + 116, 368);
+      ctx.stroke();
+      ctx.strokeStyle = '#67452c';
+      ctx.lineWidth = 15;
+      ctx.stroke();
+      // листва
+      for (let i = 0; i < 9; i++) {
+        const a = -Math.PI * 0.94 + (i / 8) * Math.PI * 0.88;
+        ctx.save();
+        ctx.translate(tx + Math.sin(t * 0.9 + i) * 5, 348);
+        ctx.rotate(a);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(54, -34, 112, -20, 148, 10);
+        ctx.bezierCurveTo(94, 20, 40, 24, 0, 0);
+        ctx.closePath();
+        fillStroke(ctx, i % 2 ? '#315c36' : '#3d7140', INK, 3.2);
+        ctx.restore();
+      }
+      // боковые пальмы, из которых вылетают кокосы
+      for (const side of [-1, 1]) {
+        const px = side < 0 ? 118 : W - 118;
+        const sway = Math.sin(t * 1.2 + side) * 8;
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 20;
+        ctx.beginPath();
+        ctx.moveTo(px, GROUND);
+        ctx.bezierCurveTo(px - 18, 500, px + 26, 390, px + sway, 300);
+        ctx.stroke();
+        ctx.strokeStyle = '#7b5430';
+        ctx.lineWidth = 13;
+        ctx.stroke();
+        for (let i = 0; i < 6; i++) {
+          const a = -Math.PI * 0.92 + (i / 5) * Math.PI * 0.9;
+          ctx.save();
+          ctx.translate(px + sway, 302);
+          ctx.rotate(a + Math.sin(t * 1.5 + i + side) * 0.04);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.bezierCurveTo(38, -26, 86, -16, 112, 8);
+          ctx.bezierCurveTo(72, 16, 32, 20, 0, 0);
+          ctx.closePath();
+          fillStroke(ctx, i % 2 ? '#3f7340' : '#4f8a4b', INK, 2.8);
+          ctx.restore();
+        }
+        for (let i = 0; i < 3; i++) {
+          circle(ctx, px + sway + side * (10 + i * 9), 322 + (i % 2) * 13, 8, '#5a3b22', INK, 2);
+        }
+      }
+      ctx.restore();
+    }
+
     if (game.egorClouds) {
       // Пол исчез: под облаками только тёмная бездна.
       const abyss = ctx.createLinearGradient(0, 548, 0, H);
@@ -11852,19 +13825,20 @@
         ctx.restore();
       }
     } else if (b.phase === 2) {
-      // Егор — огромный силуэт в глубине леса, за облаками.
+      // Егор сидит на ветке дерева. Руки опущены, поэтому голова
+      // больше не тонет в огромном кулаке, как в старой постановке.
       const headX = b.x;
       const look = hero.x < headX ? -1 : 1;
+      const sway = Math.sin(t * 1.25) * 3.5;
       ctx.save();
-      ctx.globalAlpha = 0.92;
-      egorFigure(ctx, 'stand', t, {
-        scale: 1.9,
-        x: headX,
-        y: GROUND + 6,
+      egorFigure(ctx, 'sit', t, {
+        scale: 1.26,
+        x: headX + sway,
+        y: 371,
         face: look,
         banana: false,
-        shake: b.hitFlash > 0 ? 1.4 : 0,
-        recoil: b.egorShake > 0.2 ? -0.16 : 0,
+        shake: b.hitFlash > 0 ? 1.1 : 0,
+        recoil: b.egorShake > 0.2 ? -0.1 : 0,
       });
       ctx.restore();
       // дымка между Егором и облаками
@@ -12509,7 +14483,13 @@
     const forest = b.kind === 'forest';
     const x = forest ? clamp(hero.x, 220, W - 160) : clamp(hero.x, 230, 980);
     const y = forest ? 178 : 430;
-    const label = b.kind === 'school' ? 'ВОЙТИ В ШКОЛУ' : b.kind === 'circus' ? 'ВОЙТИ В ЦИРК' : b.kind === 'forest' ? 'ВОЙТИ В ЛЕС К ЕГОРУ' : 'ОТКРЫТЬ МАГАЗИН';
+    const label = b.kind === 'school'
+      ? 'ВОЙТИ В ШКОЛУ'
+      : b.kind === 'circus'
+        ? 'ВОЙТИ В ЦИРК'
+        : b.kind === 'forest'
+          ? 'ВОЙТИ В ЛЕС К ЕГОРУ'
+          : 'ОТКРЫТЬ МАГАЗИН';
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(Math.sin(game.time * 1.7) * 0.006);
@@ -12525,7 +14505,15 @@
     ctx.fillText(IS_TOUCH ? 'НАЖМИ НА ДЕРЕВО' : 'ПРОБЕЛ / ENTER', 0, 8);
     ctx.fillStyle = 'rgba(244, 227, 189, 0.62)';
     ctx.font = `500 8px Verdana, sans-serif`;
-    ctx.fillText(b.kind === 'shop' ? 'Дымовая завеса · Автонаводка' : forest ? 'БАНАНЫ · ПАЛЬМА · ЧЕТЫРЕ ФАЗЫ' : b.sub, 0, 25);
+    ctx.fillText(
+      b.kind === 'shop'
+        ? 'Дымовая завеса · Автонаводка'
+        : forest
+          ? 'СРАЗУ 2 ФАЗА · ДЕРЕВО · ПАЛЬМЫ'
+          : b.sub,
+      0,
+      25
+    );
     // указатель вниз
     ctx.fillStyle = 'rgba(24, 12, 16, 0.9)';
     ctx.beginPath();
@@ -14579,19 +16567,27 @@
     const school = game.bossId === 'denis';
     const egor = game.bossId === 'egor';
     const elena = game.bossId === 'elena';
+    const nikita = game.bossId === 'nikita';
+    const stepa = game.bossId === 'stepa';
     const floor3 = school && game.schoolFloor === 3;
-    if (elena) drawElenaStage();
+    if (nikita) drawNikitaHallway();
+    else if (stepa) drawStepaSkatePark();
+    else if (elena) drawElenaStage();
     else if (egor) drawEgorForest();
     else if (floor3 && schoolFloor3BgCanvas) ctx.drawImage(schoolFloor3BgCanvas, 0, 0);
     else if (school && schoolBgCanvas) ctx.drawImage(schoolBgCanvas, 0, 0);
     else if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0);
 
-    if (boss.phase >= 2 && game.scene !== 'menu' && !egor && !elena) {
+    if (boss.phase >= 2 && game.scene !== 'menu' && !egor && !elena && !nikita && !stepa) {
       ctx.fillStyle = school ? 'rgba(37, 87, 76, 0.045)' : 'rgba(120, 30, 25, 0.045)';
       ctx.fillRect(0, 0, W, GROUND + 20);
     }
 
-    if (elena) {
+    if (nikita) {
+      drawNikitaAtmosphere();
+    } else if (stepa) {
+      drawStepaAtmosphere();
+    } else if (elena) {
       drawElenaAtmosphere();
     } else if (egor) {
       drawEgorAtmosphere();
@@ -14605,7 +16601,9 @@
     }
     drawMotes();
     drawCraters();
-    if (egor) {
+    if (nikita || stepa) {
+      drawNewBossWarnings();
+    } else if (egor) {
       drawEgorWarnings();
     } else if (elena) {
       drawElenaWarnings();
@@ -14620,7 +16618,7 @@
     }
 
     if (!boss.exploded) {
-      const shadowR = elena ? 80 : egor ? 120 : school ? 172 : boss.inChair ? 148 : 108;
+      const shadowR = nikita ? 96 : stepa ? 82 : elena ? 80 : egor ? 120 : school ? 172 : boss.inChair ? 148 : 108;
       drawShadow(boss.x, GROUND, shadowR, boss.airY, 0.32);
     }
     if (!game.egorClouds) {
@@ -17551,6 +19549,14 @@
     const b = boss;
     if (b.exploded) return;
     const t = game.time;
+    if (game.bossId === 'nikita') {
+      drawNikitaBoss();
+      return;
+    }
+    if (game.bossId === 'stepa') {
+      drawStepaBoss();
+      return;
+    }
     if (game.bossId === 'elena') {
       drawElena();
       return;
@@ -18295,6 +20301,11 @@
 
   init();
 })();
+
+
+
+
+
 
 
 
