@@ -284,7 +284,9 @@
     letunovHeart: false,
     heartBought: false,
     smokeDash: false,
+    smokeDashOwned: false,
     autoAim: false,
+    autoAimOwned: false,
     weapon: 'pistol',
     nutcrackerOwned: false,
     schoolCoin: false,
@@ -314,10 +316,13 @@
       progress.letunovHeart = !!data.letunovHeart || legacyHeart;
       progress.bonusHearts = progress.letunovHeart ? 1 : 0;
       progress.heartBought = progress.letunovHeart;
-      progress.smokeDash = !!data.smokeDash;
-      progress.autoAim = !!data.autoAim;
+      progress.smokeDashOwned = !!data.smokeDashOwned || !!data.smokeDash;
+      progress.smokeDash = progress.smokeDashOwned && !!data.smokeDash;
+      progress.autoAimOwned = !!data.autoAimOwned || !!data.autoAim;
       progress.nutcrackerOwned = !!data.nutcrackerOwned;
-      progress.weapon = progress.nutcrackerOwned && data.weapon === 'nutcracker' ? 'nutcracker' : 'pistol';
+      const legacyWeapon = progress.nutcrackerOwned && data.weapon === 'nutcracker';
+      progress.weapon = legacyWeapon ? 'nutcracker' : 'pistol';
+      progress.autoAim = progress.autoAimOwned && !!data.autoAim && !legacyWeapon;
       progress.schoolCoin = !!data.schoolCoin;
       progress.nikitaKey = !!data.nikitaKey;
       if (data.wins && typeof data.wins === 'object') {
@@ -348,37 +353,64 @@
     }
   }
 
+  function equippedAttackMod() {
+    if (progress.weapon === 'nutcracker' && progress.nutcrackerOwned) return 'nutcracker';
+    if (progress.autoAim && progress.autoAimOwned) return 'autoaim';
+    return 'pistol';
+  }
+
+  function equipAttackMod(mod) {
+    progress.weapon = mod === 'nutcracker' && progress.nutcrackerOwned ? 'nutcracker' : 'pistol';
+    progress.autoAim = mod === 'autoaim' && progress.autoAimOwned;
+    saveProgress();
+    updateMetaUI();
+  }
+
+  function attackModLabel(mod) {
+    if (mod === 'nutcracker') return 'Щелкунчик';
+    if (mod === 'autoaim') return 'Автонаводка';
+    return 'Пистолет';
+  }
+
   function updateMetaUI() {
     const menuProgress = document.getElementById('menuProgress');
     if (menuProgress) {
       const hearts = BASE_HEARTS + progress.bonusHearts;
       menuProgress.textContent =
         `Монеты: ${progress.coins} · Сердец: ${hearts}` +
-        (progress.autoAim ? ' · Автонаводка: есть' : '') +
-        (progress.smokeDash ? ' · Дымовая завеса: есть' : '') +
-        (progress.nutcrackerOwned ? ` · Оружие: ${progress.weapon === 'nutcracker' ? 'Щелкунчик' : 'Пистолет'}` : '');
+        ` · Атака: ${attackModLabel(equippedAttackMod())}` +
+        (progress.smokeDash ? ' · Дымовая завеса: экипирована' : '');
     }
     const shopCoins = document.getElementById('shopCoins');
     if (shopCoins) shopCoins.textContent = String(progress.coins);
     const shopStatus = document.getElementById('shopStatus');
     if (shopStatus) {
+      const smokeState = progress.smokeDash
+        ? 'экипирована'
+        : progress.smokeDashOwned
+          ? 'куплена'
+          : 'нет';
+      const aimState = progress.autoAim
+        ? 'экипирована'
+        : progress.autoAimOwned
+          ? 'куплена'
+          : 'нет';
       shopStatus.textContent =
-        `Сердец: ${BASE_HEARTS + progress.bonusHearts} · Дымовая завеса: ` +
-        (progress.smokeDash ? 'куплена' : 'нет') +
-        ` · Автонаводка: ${progress.autoAim ? 'куплена' : 'нет'}` +
-        ` · Щелкунчик: ${progress.nutcrackerOwned ? (progress.weapon === 'nutcracker' ? 'в руках' : 'куплен') : 'нет'}` +
+        `Сердец: ${BASE_HEARTS + progress.bonusHearts} · Дымовая завеса: ${smokeState}` +
+        ` · Автонаводка: ${aimState}` +
+        ` · Атака: ${attackModLabel(equippedAttackMod())}` +
         ` · Побед: ${Object.values(progress.wins).reduce((sum, n) => sum + (n || 0), 0)}`;
     }
     updateInventoryUI();
   }
 
-  function slotMarkup(id, title, sub, owned, color) {
+  function slotMarkup(id, title, sub, owned, color, stateText) {
     const el = document.getElementById(id);
     if (!el) return;
     el.classList.toggle('is-owned', !!owned);
     el.style.setProperty('--slot-color', color);
     const state = el.querySelector('.inventory-slot-state');
-    if (state) state.textContent = owned ? 'ЭКИПИРОВАНО' : 'СЛОТ ПУСТ';
+    if (state) state.textContent = stateText || (owned ? 'ЭКИПИРОВАНО' : 'СЛОТ ПУСТ');
     const name = el.querySelector('.inventory-slot-name');
     if (name) name.textContent = title;
     const desc = el.querySelector('.inventory-slot-sub');
@@ -386,17 +418,23 @@
   }
 
   function updateInventoryUI() {
-    const nutcrackerEquipped = progress.nutcrackerOwned && progress.weapon === 'nutcracker';
+    const attackMod = equippedAttackMod();
+    const attackTitle =
+      attackMod === 'nutcracker' ? 'ЩЕЛКУНЧИК' : attackMod === 'autoaim' ? 'АВТОНАВОДКА' : 'ПИСТОЛЕТ';
+    const attackSub =
+      attackMod === 'nutcracker'
+        ? 'Красный снаряд, через 2 м — полунаводка · нажми, чтобы сменить'
+        : attackMod === 'autoaim'
+          ? 'Снаряды сами летят в босса, урон /1.3 · нажми, чтобы сменить'
+          : progress.nutcrackerOwned || progress.autoAimOwned
+            ? 'Базовое оружие · нажми, чтобы выбрать купленный модификатор'
+            : 'Базовое оружие · модификаторы продаются в магазине';
     slotMarkup(
       'invWeapon',
-      nutcrackerEquipped ? 'ЩЕЛКУНЧИК' : 'ПИСТОЛЕТ',
-      nutcrackerEquipped
-        ? 'Красный снаряд · зелёная самонаводка · нажми, чтобы сменить'
-        : progress.nutcrackerOwned
-          ? 'Обычные выстрелы · нажми, чтобы взять Щелкунчика'
-          : 'Базовое оружие · Щелкунчик продаётся в магазине',
+      attackTitle,
+      attackSub,
       true,
-      nutcrackerEquipped ? '#a83232' : '#6d63a9'
+      attackMod === 'nutcracker' ? '#a83232' : attackMod === 'autoaim' ? '#b4477a' : '#6d63a9'
     );
     slotMarkup(
       'invBuff',
@@ -407,10 +445,15 @@
     );
     slotMarkup(
       'invPerk',
-      progress.smokeDash ? 'ДЫМОВАЯ ЗАВЕСА' : 'НЕТ ПЕРКА',
-      progress.smokeDash ? 'Исчезновение и неуязвимость в рывке' : 'Купи перк в магазине',
-      progress.smokeDash,
-      '#2b7a6e'
+      progress.smokeDashOwned ? 'ДЫМОВАЯ ЗАВЕСА' : 'НЕТ ПЕРКА',
+      progress.smokeDash
+        ? 'Исчезновение и неуязвимость в рывке · нажми, чтобы снять'
+        : progress.smokeDashOwned
+          ? 'Куплена · нажми, чтобы экипировать'
+          : 'Купи перк в магазине',
+      progress.smokeDashOwned,
+      '#2b7a6e',
+      progress.smokeDash ? 'ЭКИПИРОВАНО' : progress.smokeDashOwned ? 'КУПЛЕНО · НАЖМИ' : null
     );
   }
 
@@ -3212,19 +3255,15 @@
     const buyAim = $('buyAimButton');
     const buyNutcracker = $('buyNutcrackerButton');
     if (!buySmoke) return;
-    buySmoke.disabled = progress.coins < 2 || progress.smokeDash;
-    buySmoke.textContent = progress.smokeDash ? 'КУПЛЕНО' : '2 МОНЕТЫ';
+    buySmoke.disabled = progress.smokeDashOwned || progress.coins < 2;
+    buySmoke.textContent = progress.smokeDashOwned ? 'КУПЛЕНО' : '2 МОНЕТЫ';
     if (buyAim) {
-      buyAim.disabled = progress.coins < 2 || progress.autoAim;
-      buyAim.textContent = progress.autoAim ? 'КУПЛЕНО' : '2 МОНЕТЫ';
+      buyAim.disabled = progress.autoAimOwned || progress.coins < 2;
+      buyAim.textContent = progress.autoAimOwned ? 'КУПЛЕНО' : '2 МОНЕТЫ';
     }
     if (buyNutcracker) {
-      buyNutcracker.disabled = !progress.nutcrackerOwned && progress.coins < 3;
-      buyNutcracker.textContent = progress.nutcrackerOwned
-        ? progress.weapon === 'nutcracker'
-          ? 'В РУКАХ'
-          : 'ВЗЯТЬ В РУКИ'
-        : '3 МОНЕТЫ';
+      buyNutcracker.disabled = progress.nutcrackerOwned || progress.coins < 3;
+      buyNutcracker.textContent = progress.nutcrackerOwned ? 'КУПЛЕНО' : '3 МОНЕТЫ';
     }
   }
 
@@ -3246,8 +3285,8 @@
   }
 
   function buyAutoAim() {
-    if (progress.autoAim) {
-      setShopNotice('Автонаводка уже установлена.');
+    if (progress.autoAimOwned) {
+      setShopNotice('Автонаводка уже куплена. Экипируй её в инвентаре.');
       return;
     }
     if (progress.coins < 2) {
@@ -3256,17 +3295,17 @@
       return;
     }
     progress.coins -= 2;
-    progress.autoAim = true;
+    progress.autoAimOwned = true;
     saveProgress();
     updateMetaUI();
     renderShop();
-    setShopNotice('Автонаводка куплена: снаряды летят в босса, но урон снижен в 1.3 раза.');
+    setShopNotice('Автонаводка куплена. Это модификатор атаки — экипируй его в инвентаре.');
     Sound.sfx('win');
   }
 
   function buySmoke() {
-    if (progress.smokeDash) {
-      setShopNotice('Дымовая завеса уже куплена.');
+    if (progress.smokeDashOwned) {
+      setShopNotice('Дымовая завеса уже куплена. Экипируй её в инвентаре.');
       return;
     }
     if (progress.coins < 2) {
@@ -3275,25 +3314,17 @@
       return;
     }
     progress.coins -= 2;
-    progress.smokeDash = true;
+    progress.smokeDashOwned = true;
     saveProgress();
     updateMetaUI();
     renderShop();
-    setShopNotice('Дымовая завеса куплена: рывок теперь скрывает героя.');
+    setShopNotice('Дымовая завеса куплена. Экипируй перк в инвентаре.');
     Sound.sfx('win');
   }
 
   function buyNutcracker() {
     if (progress.nutcrackerOwned) {
-      progress.weapon = progress.weapon === 'nutcracker' ? 'pistol' : 'nutcracker';
-      saveProgress();
-      updateMetaUI();
-      renderShop();
-      setShopNotice(
-        progress.weapon === 'nutcracker'
-          ? 'Щелкунчик в руках: красные снаряды и зелёная самонаводка.'
-          : 'Снова в руках обычный пистолет.'
-      );
+      setShopNotice('Щелкунчик уже куплен. Экипируй его в инвентаре.');
       Sound.sfx('click');
       return;
     }
@@ -3304,11 +3335,10 @@
     }
     progress.coins -= 3;
     progress.nutcrackerOwned = true;
-    progress.weapon = 'nutcracker';
     saveProgress();
     updateMetaUI();
     renderShop();
-    setShopNotice('Щелкунчик куплен и взят в руки. С одной картой он ставит красную турель.');
+    setShopNotice('Щелкунчик куплен. Это модификатор атаки — экипируй его в инвентаре.');
     Sound.sfx('win');
   }
 
@@ -3472,9 +3502,19 @@
   }
 
   $('startButton').addEventListener('click', goMap);
+  let inventoryReturnPanel = 'menu';
   if ($('menuInventoryButton')) {
     $('menuInventoryButton').addEventListener('click', () => {
       Sound.sfx('click');
+      inventoryReturnPanel = 'menu';
+      updateInventoryUI();
+      showPanel('inventory');
+    });
+  }
+  if ($('openShopInventoryButton')) {
+    $('openShopInventoryButton').addEventListener('click', () => {
+      Sound.sfx('click');
+      inventoryReturnPanel = 'shop';
       updateInventoryUI();
       showPanel('inventory');
     });
@@ -3482,17 +3522,35 @@
   if ($('closeInventoryButton')) {
     $('closeInventoryButton').addEventListener('click', () => {
       Sound.sfx('click');
-      showPanel('menu');
+      if (inventoryReturnPanel === 'shop' && game.shopOpen) {
+        renderShop();
+        showPanel('shop');
+      } else {
+        showPanel('menu');
+      }
     });
   }
   const invWeaponEl = $('invWeapon');
   if (invWeaponEl) {
     invWeaponEl.addEventListener('click', () => {
-      if (!progress.nutcrackerOwned) {
+      const order = ['pistol'];
+      if (progress.nutcrackerOwned) order.push('nutcracker');
+      if (progress.autoAimOwned) order.push('autoaim');
+      if (order.length > 1) {
+        const current = order.indexOf(equippedAttackMod());
+        equipAttackMod(order[(current + 1) % order.length]);
+      }
+      Sound.sfx('click');
+    });
+  }
+  const invPerkEl = $('invPerk');
+  if (invPerkEl) {
+    invPerkEl.addEventListener('click', () => {
+      if (!progress.smokeDashOwned) {
         Sound.sfx('click');
         return;
       }
-      progress.weapon = progress.weapon === 'nutcracker' ? 'pistol' : 'nutcracker';
+      progress.smokeDash = !progress.smokeDash;
       saveProgress();
       updateMetaUI();
       Sound.sfx('click');
@@ -3644,7 +3702,8 @@
       h.lastMove = h.face;
     }
 
-    // Прицел: полный круг джойстика (вверх, вниз, диагонали), на клавиатуре — вверх.
+    // Прицел: горизонтально, вверх или по диагонали. Вниз оружие больше
+    // не опускается — нижняя половина джойстика только приседает.
     let aimX = h.face;
     let aimY = 0;
     const joyAim = touchAim.active ? Math.hypot(touchAim.x, touchAim.y) : 0;
@@ -3659,6 +3718,8 @@
       aimX = side === 0 ? 0 : side;
       aimY = -1;
     }
+    if (aimY > 0) aimY = 0;
+    if (aimX === 0 && aimY === 0) aimX = h.face;
     const aimLen = Math.hypot(aimX, aimY) || 1;
     h.aimX = aimX / aimLen;
     h.aimY = aimY / aimLen;
@@ -3671,7 +3732,7 @@
     const canShoot =
       game.scene === 'fight' && game.introT <= 0.9 && !boss.dying && h.hurtT <= 0;
     const shooting =
-      canShoot && (settings.autoFire || held.shoot) && h.dashT <= 0 && h.superT <= 0;
+      canShoot && (settings.autoFire || held.shoot) && h.dashT <= 0;
 
     // старт рывка
     if (
@@ -3702,8 +3763,33 @@
       game.shake = Math.max(game.shake, 2.5);
     }
 
-    // прыжок
+    // С облака Егора можно спрыгнуть только приседом и прыжком сразу.
+    let wantCloudDrop = false;
     if (
+      pressed.jump &&
+      held.crouch &&
+      h.onGround &&
+      game.egorClouds &&
+      !game.egorCloudFinale
+    ) {
+      for (const p of platforms) {
+        if (p.kind !== 'egorCloud' || !p.solid) continue;
+        if (Math.abs(h.x - p.x) > p.w / 2 - 6) continue;
+        if (Math.abs(h.y - p.y) > 6) continue;
+        if (cloudLevelBelow(p.y, h.x) === null) continue;
+        wantCloudDrop = true;
+        break;
+      }
+    }
+    if (wantCloudDrop) {
+      h.jumpBuf = 0;
+      h.dropT = 0.34;
+      h.onGround = false;
+      h.vy = 240;
+      h.y += 2;
+      spawnDust(h.x, h.y, 4, 0.6);
+      Sound.sfx('dash');
+    } else if (
       h.jumpBuf > 0 &&
       (h.onGround || h.coyote > 0) &&
       h.dashT <= 0 &&
@@ -3782,7 +3868,7 @@
             game.egorClouds &&
             !game.egorCloudFinale &&
             p.kind === 'egorCloud' &&
-            held.crouch &&
+            h.dropT > 0 &&
             cloudLevelBelow(p.y, h.x) !== null;
           const canDropNormal =
             !game.egorClouds && held.crouch && floorLevelBelow(p.y, h.x) !== null;
@@ -3857,27 +3943,40 @@
     Sound.sfx('parry');
   }
 
-  function tryParry() {
-    const h = hero;
-    const cx = h.x;
-    const cy = h.y - HERO_H * 0.5;
-    const near = (x, y, r = 78) => {
-      const dx = x - cx;
-      const dy = y - cy;
-      return dx * dx + dy * dy <= r * r;
-    };
+  // Парировать можно только при реальном касании розового предмета:
+  // сверяем пиксели предмета с телом героя, без большого радиуса-подсказки.
+  function parryTouchesCircle(x, y, r, extra = 0) {
+    return circleRect(x, y, r + extra, heroRect());
+  }
 
+  function parryTouchesRect(rect, extra = 0) {
+    if (extra <= 0) return overlap(heroRect(), rect);
+    const padded = {
+      x: rect.x - extra,
+      y: rect.y - extra,
+      w: rect.w + extra * 2,
+      h: rect.h + extra * 2,
+    };
+    return overlap(heroRect(), padded);
+  }
+
+  function parryWaveRect(w) {
+    // Волна рисуется от пола на ~50 px вверх и шириной ~90 px.
+    return { x: w.x - 45, y: GROUND - 50, w: 90, h: 50 };
+  }
+
+  function tryParry() {
     // Парируются только розовые атаки боссов, а не случайные орбы.
     for (let i = soundWaves.length - 1; i >= 0; i--) {
       const w = soundWaves[i];
-      if (!w.parryable || !near(w.x, w.y, 96)) continue;
+      if (!w.parryable || !parryTouchesCircle(w.x, w.y, w.r, 4)) continue;
       soundWaves.splice(i, 1);
       parrySuccess(w.x, w.y);
       return true;
     }
     for (let i = bossShots.length - 1; i >= 0; i--) {
       const s = bossShots[i];
-      if (!s.parryable || !near(s.x, s.y, 98)) continue;
+      if (!s.parryable || !parryTouchesCircle(s.x, s.y, s.r, 4)) continue;
       bossShots.splice(i, 1);
       if (s.kind === 'flower') spawnPetalBurst(s.x, s.y, s.color, 14);
       parrySuccess(s.x, s.y);
@@ -3885,14 +3984,14 @@
     }
     for (let i = waves.length - 1; i >= 0; i--) {
       const w = waves[i];
-      if (!w.parryable || !near(w.x, GROUND - 156, 128)) continue;
+      if (!w.parryable || !parryTouchesRect(parryWaveRect(w), 4)) continue;
       waves.splice(i, 1);
-      parrySuccess(w.x, GROUND - 156);
+      parrySuccess(w.x, GROUND - 40);
       return true;
     }
     for (let i = windCharges.length - 1; i >= 0; i--) {
       const w = windCharges[i];
-      if (!w.parryable || !near(w.x, w.y, 108)) continue;
+      if (!w.parryable || !parryTouchesCircle(w.x, w.y, w.r, 4)) continue;
       windCharges.splice(i, 1);
       spawnRing(w.x, w.y, PINK_BRIGHT, 34);
       parrySuccess(w.x, w.y);
@@ -3900,7 +3999,7 @@
     }
     for (const t of turrets) {
       if (!t.parryable || t.dive) continue;
-      if (!near(t.x, t.y, 104)) continue;
+      if (!parryTouchesCircle(t.x, t.y, 32, 4)) continue;
       t.parryable = false;
       t.fireT = 0;
       parrySuccess(t.x, t.y, 'ТУРЕЛЬ!');
@@ -4002,33 +4101,27 @@
     const bx = h.x + ax * 34;
     const by = h.y - lerp(52, 32, crouchK) + ay * 32;
     const nutcracker = progress.weapon === 'nutcracker' && progress.nutcrackerOwned;
-    // Щелкунчик стреляет двумя зелёными пулями. Наводка берётся только
-    // в момент выстрела: если враг ушёл — пули летят по старой траектории.
-    const target = nutcracker ? autoAimPoint() : null;
-    let baseAng = Math.atan2(ay || 0, ax || 1);
-    if (target) baseAng = Math.atan2(target.y - by, target.x - bx);
-    const count = nutcracker ? 2 : 1;
-    for (let shot = 0; shot < count; shot++) {
-      const ang = baseAng + (nutcracker ? (shot === 0 ? -0.032 : 0.032) : 0);
-      const speed = nutcracker ? 1050 : 1180;
-      const sx = bx + (nutcracker ? Math.cos(ang) * 18 * shot : 0);
-      const sy = by + (nutcracker ? Math.sin(ang) * 18 * shot + (shot ? 8 : -8) : 0);
-      bullets.push({
-        x: sx,
-        y: sy,
-        vx: Math.cos(ang) * speed,
-        vy: Math.sin(ang) * speed,
-        life: 1.5,
-        t: 0,
-        dir: Math.cos(ang) >= 0 ? 1 : -1,
-        dead: false,
-        dmg: 9 / (progress.autoAim ? 1.3 : 1),
-        nutcracker,
-        green: nutcracker,
-        noHoming: nutcracker,
-        hitSomething: false,
-      });
-    }
+    // Щелкунчик: сначала обычный красный снаряд летит прямо, а через
+    // пару метров начинает мягко подруливать к боссу (полунаводка).
+    const baseAng = Math.atan2(ay || 0, ax || 1);
+    const speed = nutcracker ? 1050 : 1180;
+    bullets.push({
+      x: bx,
+      y: by,
+      vx: Math.cos(baseAng) * speed,
+      vy: Math.sin(baseAng) * speed,
+      life: nutcracker ? 1.7 : 1.5,
+      t: 0,
+      dir: Math.cos(baseAng) >= 0 ? 1 : -1,
+      dead: false,
+      dmg: 9 / (progress.autoAim ? 1.3 : 1),
+      nutcracker,
+      green: false,
+      homing: false,
+      homingAfter: nutcracker ? 132 : 0,
+      travel: 0,
+      hitSomething: false,
+    });
     for (let i = 0; i < 4; i++) {
       addParticle({
         kind: 'spark',
@@ -4039,7 +4132,7 @@
         life: rand(0.08, 0.2),
         maxLife: 0.2,
         size: rand(2, 5),
-        color: nutcracker ? pick(['#7dff9a', '#b8ffd0', '#4fd36f']) : pick([GOLD_BRIGHT, CREAM, RUST]),
+        color: nutcracker ? pick(['#ff8e7c', '#ffc2b8', '#ff5f4f']) : pick([GOLD_BRIGHT, CREAM, RUST]),
         rot: rand(0, TAU),
         vr: rand(-10, 10),
         grav: 300,
@@ -4047,27 +4140,6 @@
       });
     }
     Sound.sfx('shoot');
-  }
-
-  function spawnNutcrackerChild(b) {
-    // Дочерняя зелёная пуля продолжает направление родителя,
-    // а не подруливает к врагу после его перемещения.
-    const ang = Math.atan2(b.vy || 0, b.vx || b.dir || 1);
-    bullets.push({
-      x: b.x,
-      y: b.y,
-      vx: Math.cos(ang) * 760,
-      vy: Math.sin(ang) * 760,
-      life: 2.2,
-      t: 0,
-      dir: Math.cos(ang) >= 0 ? 1 : -1,
-      dead: false,
-      dmg: 4 / (progress.autoAim ? 1.3 : 1),
-      green: true,
-      noHoming: true,
-      small: true,
-    });
-    spawnRing(b.x, b.y, '#7dff9a', 16);
   }
 
   function spawnNutcrackerTurret() {
@@ -4903,7 +4975,7 @@
       spin: rand(0, TAU),
       dir: toward,
       parryable: true,
-      color: index % 2 ? PINK : '#8fd0a0',
+      color: index % 2 ? PINK : '#ff9cc5',
       harmless: false,
     });
     if (!b.parryTipShown) {
@@ -6368,16 +6440,24 @@
       b.t += dt;
       b.life -= dt;
 
-      // Автонаводка и полу-самонаводка плавно подруливают снаряд к боссу.
-      // У щелкунчика наводка только на момент выстрела — noHoming.
-      if (!b.noHoming && (progress.autoAim || b.homing)) {
+      // Щелкунчик сначала летит прямо; через пару метров включается
+      // полунаводка. Автонаводка — отдельный модификатор атаки.
+      if (b.nutcracker && !b.homing) {
+        b.travel = (b.travel || 0) + Math.hypot(b.vx, b.vy) * dt;
+        if (b.travel >= (b.homingAfter || 132)) {
+          b.homing = true;
+          spawnRing(b.x, b.y, '#ff8e7c', 14);
+        }
+      }
+      const homing = b.nutcracker ? b.homing : progress.autoAim || b.homing;
+      if (homing) {
         const target = autoAimPoint();
         if (target) {
           const speed = Math.hypot(b.vx, b.vy) || 1180;
           const desired = Math.atan2(target.y - b.y, target.x - b.x);
           let cur = Math.atan2(b.vy || 0, b.vx || 1);
           let diff = ((desired - cur + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-          const turn = b.big ? 4.4 : b.homing ? 2.2 + (progress.autoAim ? 3 : 0) : 9.5;
+          const turn = b.big ? 4.4 : b.homing ? 2.2 : 9.5;
           cur += clamp(diff, -turn * dt, turn * dt);
           b.vx = Math.cos(cur) * speed;
           b.vy = Math.sin(cur) * speed;
@@ -6388,7 +6468,6 @@
       b.y += (b.vy || 0) * dt;
       if (Math.abs(b.vx) > 30) b.dir = b.vx >= 0 ? 1 : -1;
       if (b.life <= 0 || b.x < 24 || b.x > W - 24 || b.y < 8 || b.y > GROUND + 30) {
-        if (b.nutcracker && !b.hitSomething) spawnNutcrackerChild(b);
         bullets.splice(i, 1);
         continue;
       }
@@ -6747,14 +6826,61 @@
       if (s.kind === 'cloudZap') {
         continue;
       }
+      if (s.kind === 'elenaTooth') {
+        if (s.mode === 'fall') {
+          s.vy += 1500 * dt;
+        } else {
+          s.vy += 1900 * dt;
+          s.dir = hero.x < s.x ? -1 : 1;
+          s.vx = s.dir * 150 * difficultyConfig().speed;
+        }
+        const wasAirborne = s.mode === 'run' && s.y < GROUND - s.r - 0.6;
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        if (s.y >= GROUND - s.r) {
+          s.y = GROUND - s.r;
+          if (s.mode === 'fall') {
+            if (!s.bounced) {
+              s.bounced = true;
+              s.vy = -Math.abs(s.vy) * 0.28;
+              s.vx *= 0.7;
+              spawnDust(s.x, GROUND, 2, 0.35);
+            } else {
+              s.mode = 'run';
+              s.vy = 0;
+              s.hopT = rand(0.18, 0.55);
+              spawnDust(s.x, GROUND, 2, 0.45);
+            }
+          } else {
+            s.vy = 0;
+            if (wasAirborne) {
+              s.hopT = rand(0.5, 0.95) / Math.max(0.7, difficultyConfig().speed);
+              spawnDust(s.x, GROUND, 1, 0.3);
+            }
+          }
+        }
+        if (s.mode === 'run' && !wasAirborne && s.y >= GROUND - s.r - 0.6 && s.vy >= 0) {
+          s.hopT -= dt;
+          if (s.hopT <= 0) {
+            s.vy = -rand(340, 460);
+            s.y -= 1;
+            spawnDust(s.x, GROUND, 1, 0.3);
+          }
+        }
+        if (s.life <= 0 || s.x < ARENA_L - 30 || s.x > ARENA_R + 30) {
+          bossShots.splice(i, 1);
+          continue;
+        }
+        continue;
+      }
       if (s.kind === 'coconut') {
-        s.vy += 1180 * dt;
+        s.vy += 900 * dt;
         s.x += s.vx * dt;
         s.y += s.vy * dt;
         if (s.y > GROUND - s.r) {
           s.y = GROUND - s.r;
-          s.vy = -Math.abs(s.vy) * 0.44;
-          s.vx = Math.min(s.vx, -130);
+          s.vy = -Math.abs(s.vy) * 0.4;
+          s.vx = Math.min(s.vx, -85);
           spawnDust(s.x, GROUND, 3, 0.5);
           Sound.sfx('land');
         }
@@ -6794,6 +6920,10 @@
         continue;
       }
       if (s.kind === 'bird') {
+        if (s.delay > 0) {
+          s.delay -= dt;
+          continue;
+        }
         s.x += s.vx * dt;
         const bob = s.bobAmp === undefined ? 26 : s.bobAmp;
         s.y = s.baseY + Math.sin(s.t * 4 + s.phase) * bob;
@@ -9000,14 +9130,14 @@
         ctx.save();
         ctx.rotate((i / 6) * TAU);
         ellipsePath(ctx, 0, -23, 13, 19);
-        fillStroke(ctx, s.color, INK, 3);
+        fillStroke(ctx, s.parryable ? PINK : s.color, INK, 3);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
         ctx.beginPath();
         ctx.ellipse(-3, -27, 4, 6, -0.2, 0, TAU);
         ctx.fill();
         ctx.restore();
       }
-      circle(ctx, 0, 0, 17, '#f5d069', INK, 3);
+      circle(ctx, 0, 0, 17, s.parryable ? PINK_BRIGHT : '#f5d069', INK, 3);
       ctx.fillStyle = s.shade;
       ctx.beginPath();
       ctx.arc(-5, -2, 2.2, 0, TAU);
@@ -9136,7 +9266,7 @@
       ctx.quadraticCurveTo(0, y + (i % 2 ? 8 : -5), 10, y + 4);
     }
     ctx.stroke();
-    circle(ctx, 0, 2, s.r, s.color, INK, 3.5);
+    circle(ctx, 0, 2, s.r, s.parryable ? PINK : s.color, INK, 3.5);
     ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
     ctx.beginPath();
     ctx.ellipse(-5, -4, 7, 4, -0.35, 0, TAU);
@@ -9420,6 +9550,10 @@
         drawElenaShot(s);
         continue;
       }
+      if (s.kind === 'elenaTooth') {
+        drawElenaTooth(s);
+        continue;
+      }
       if (
         s.kind === 'banana' ||
         s.kind === 'coconut' ||
@@ -9613,7 +9747,7 @@
       const superScale = b.big ? (b.superScale || 1) : 1;
       if (superScale !== 1) ctx.scale(superScale, superScale);
       const rot = game.time * 14 * b.dir;
-      const greenBullet = !b.big && (b.green || b.homing || (progress.autoAim && !b.nutcracker && !b.turretShot));
+      const greenBullet = !b.big && !b.nutcracker && (b.green || b.homing || (progress.autoAim && !b.turretShot));
       if (greenBullet) {
         const pulse = 1 + Math.sin(game.time * 18) * 0.08;
         const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, 26);
@@ -9786,14 +9920,14 @@
       ctx.restore();
       // корпус
       roundRect(ctx, -23, -20, 46, 40, 12);
-      fillStroke(ctx, '#b6372e', INK, 3.2);
+      fillStroke(ctx, t.parryable ? '#ff9cc5' : '#b6372e', INK, 3.2);
       ctx.fillStyle = 'rgba(255, 210, 190, 0.22)';
       roundRect(ctx, -16, -14, 13, 11, 5);
       ctx.fill();
       // ствол
       roundRect(ctx, 15, -9, 30, 18, 7);
-      fillStroke(ctx, '#7e211c', INK, 3);
-      circle(ctx, 44, 0, 8, '#3c1513', INK, 2.4);
+      fillStroke(ctx, t.parryable ? '#d64c88' : '#7e211c', INK, 3);
+      circle(ctx, 44, 0, 8, t.parryable ? PINK : '#3c1513', INK, 2.4);
       // глаза-лампы
       circle(ctx, -4, -2, 5, '#ffe6a8', INK, 1.8);
       circle(ctx, 8, -2, 5, '#ffe6a8', INK, 1.8);
@@ -9937,27 +10071,44 @@
 
   function drawParryPrompt() {
     if (hero.dead || hero.onGround || hero.parryCd > 0) return;
-    const cx = hero.x;
-    const cy = hero.y - HERO_H * 0.5;
     let near = null;
-    let best = 108 * 108;
-    const consider = (x, y, r) => {
-      const dx = x - cx;
-      const dy = y - cy;
+    let best = Infinity;
+    const considerCircle = (x, y, r) => {
+      if (!parryTouchesCircle(x, y, r, 12)) return;
+      const dx = x - hero.x;
+      const dy = y - (hero.y - HERO_H * 0.5);
       const d2 = dx * dx + dy * dy;
-      if (d2 <= Math.max(r, 92) * Math.max(r, 92) && d2 < best) {
+      if (d2 < best) {
         best = d2;
         near = { x, y };
       }
     };
+    const considerRect = (rect) => {
+      if (!parryTouchesRect(rect, 12)) return;
+      const cx = rect.x + rect.w / 2;
+      const cy = rect.y + rect.h / 2;
+      const dx = cx - hero.x;
+      const dy = cy - (hero.y - HERO_H * 0.5);
+      const d2 = dx * dx + dy * dy;
+      if (d2 < best) {
+        best = d2;
+        near = { x: cx, y: cy };
+      }
+    };
     for (const s of bossShots) {
-      if (s.parryable) consider(s.x, s.y, s.r + 64);
+      if (s.parryable) considerCircle(s.x, s.y, s.r);
     }
     for (const w of waves) {
-      if (w.parryable) consider(w.x, GROUND - 156, 92);
+      if (w.parryable) considerRect(parryWaveRect(w));
     }
     for (const w of soundWaves) {
-      if (w.parryable) consider(w.x, w.y, 96);
+      if (w.parryable) considerCircle(w.x, w.y, w.r);
+    }
+    for (const w of windCharges) {
+      if (w.parryable) considerCircle(w.x, w.y, w.r);
+    }
+    for (const t of turrets) {
+      if (t.parryable && !t.dive) considerCircle(t.x, t.y, 32);
     }
     if (!near) return;
     const pulse = 0.6 + 0.4 * Math.sin(game.time * 14);
@@ -10940,7 +11091,7 @@
   function nikitaPunchRect() {
     const b = boss;
     if (game.bossId !== 'nikita' || b.phase !== 1 || !b.nkPunchActive) return null;
-    const reach = 300 * clamp(b.nkPunchP, 0, 1);
+    const reach = 440 * clamp(b.nkPunchP, 0, 1);
     return {
       x: b.x - 74 - reach,
       y: GROUND - 196,
@@ -10955,7 +11106,7 @@
     const p = clamp(b.nkBgPunchP, 0, 2);
     if (p <= 0.2 || p >= 1.5) return null;
     const k = p <= 1 ? easeOutCubic(p) : easeInCubic(2 - p);
-    const fy = lerp(-80, GROUND - 150, k);
+    const fy = lerp(-80, GROUND - 44, k);
     return {
       x: b.nkBgPunchX - 54,
       y: fy - 54,
@@ -11129,7 +11280,15 @@
         Sound.sfx('telegraph');
       }
       if (b.nkBgFistActive) {
+        const prevPunch = b.nkBgPunchP;
         b.nkBgPunchP += dt * 2.6;
+        if (prevPunch < 1 && b.nkBgPunchP >= 1) {
+          // Кулак Степы долетает до самого пола.
+          spawnDust(b.nkBgPunchX, GROUND, 14, 1.25);
+          spawnRing(b.nkBgPunchX, GROUND - 6, '#e8d7b0', 42);
+          game.shake = Math.max(game.shake, 9);
+          Sound.sfx('slam');
+        }
         if (b.nkBgPunchP >= 2) {
           b.nkBgFistActive = false;
           b.nkBgPunchP = 0;
@@ -12146,7 +12305,7 @@
       ctx.restore();
       // рука Степы в ударе
       if (b.nkPunchActive || b.nkState === 'nkPunchOut' || b.nkState === 'nkPunchRecover') {
-        const reach = 300 * clamp(b.nkPunchP, 0, 1);
+        const reach = 440 * clamp(b.nkPunchP, 0, 1);
         ctx.save();
         ctx.translate(stepaX, GROUND - 236);
         ctx.strokeStyle = INK;
@@ -12274,7 +12433,7 @@
     if (b.nkBgFistActive) {
       const p = clamp(b.nkBgPunchP, 0, 2);
       const k = p <= 1 ? easeOutCubic(p) : easeInCubic(2 - p);
-      const fy = lerp(-80, GROUND - 150, k);
+      const fy = lerp(-80, GROUND - 44, k);
       // На заднем плане появляется сам Степа — видно, чей это кулак.
       const bgStepX = W / 2;
       const bgStepFeet = 352;
@@ -12789,7 +12948,7 @@
       kind: 'coconut',
       x: boss.x + rand(-35, 95),
       y: GROUND - 408,
-      vx: -rand(55, 130),
+      vx: -rand(34, 82),
       vy: rand(-20, 40),
       r: 19,
       t: 0,
@@ -12884,10 +13043,12 @@
   }
 
   function spawnEgorBirdFlock() {
+    // Птицы вылетают не всей стеной: каждая полоса запускается со своей
+    // задержкой, чтобы между ними оставалось окно для манёвра.
     for (let i = 0; i < 5; i++) {
       bossShots.push({
         kind: 'bird',
-        x: W + 60 + i * 58,
+        x: W + 60 + rand(0, 30),
         y: 205 + i * 43 + rand(-16, 16),
         baseY: 205 + i * 43,
         phase: rand(0, TAU),
@@ -12895,12 +13056,13 @@
         vy: 0,
         r: 16,
         t: 0,
-        life: 4,
+        life: 6.5,
+        delay: 0.42 * i,
         spin: 0,
         dir: -1,
       });
     }
-    spawnComic('СТАЯ!', W - 190, 238, 24, CREAM);
+    spawnComic('СТАЯ ПО ОДНОЙ!', W - 190, 238, 24, CREAM);
   }
 
   function spawnEgorCloudBirds() {
@@ -12953,10 +13115,10 @@
     b.egorPalmSide = -(b.egorPalmSide || 1);
     const fromX = b.egorPalmSide < 0 ? 132 : W - 132;
     const fromY = 306;
-    const fuse = 0.86;
+    const fuse = 1.18;
     const targetX = clamp(hero.x, ARENA_L + 40, ARENA_R - 40);
     const targetY = clamp(hero.y - 46, 190, GROUND - 80);
-    const gravity = 700;
+    const gravity = 620;
     const vx = (targetX - fromX) / fuse;
     const vy = (targetY - fromY) / fuse - 0.5 * gravity * fuse;
     bossShots.push({
@@ -12990,9 +13152,9 @@
         kind: 'coconutShard',
         x,
         y,
-        vx: Math.cos(angle) * 390,
-        vy: Math.sin(angle) * 390,
-        gravity: 520,
+        vx: Math.cos(angle) * 300,
+        vy: Math.sin(angle) * 300,
+        gravity: 460,
         r: 8,
         t: 0,
         life: 2.6,
@@ -13136,7 +13298,7 @@
         b.egorBurstT -= dt;
         if (b.egorBurstLeft > 0 && b.egorBurstT <= 0) {
           spawnEgorCoconut();
-          b.egorBurstT = 0.28;
+          b.egorBurstT = 0.42;
           b.egorBurstLeft--;
         }
         if (b.egorBurstLeft <= 0 && b.timer > 1.35) egorToIdle();
@@ -15294,6 +15456,31 @@
     });
   }
 
+  function spawnElenaTeeth() {
+    const b = boss;
+    // Зубы выпадают изо рта, приземляются, а потом бегут за героем
+    // и подпрыгивают, как маленькие злые солдатики.
+    for (let i = 0; i < 6; i++) {
+      bossShots.push({
+        kind: 'elenaTooth',
+        x: b.x - 18 + rand(-16, 16),
+        y: GROUND - 192 + rand(-12, 10),
+        vx: rand(-95, 55),
+        vy: rand(-390, -190),
+        r: 11,
+        t: 0,
+        life: 9,
+        mode: 'fall',
+        bounced: false,
+        hopT: rand(0.18, 0.55),
+        spin: rand(0, TAU),
+        dir: -1,
+      });
+    }
+    spawnComic('ЗУБЫ ВРАССЫПНУЮ!', W / 2, 150, 20, PINK_BRIGHT);
+    Sound.sfx('chalk');
+  }
+
   function elenaSpawnWave(dir) {
     const b = boss;
     waves.push({
@@ -15508,7 +15695,7 @@
       b.x = damp(b.x, 1020, 2.2, dt);
       b.elenaAttackT -= dt;
       if (b.elenaAttackT <= 0) {
-        const type = b.elenaPattern++ % 5;
+        const type = b.elenaPattern++ % 6;
         if (type === 0) {
           setBossState('elenaBullWind');
           b.face = -1;
@@ -15529,10 +15716,15 @@
           b.face = -1;
           spawnComic('ТОП! ПРЫГАЙ!', W / 2, 150, 21, GOLD_BRIGHT);
           Sound.sfx('telegraph');
-        } else {
+        } else if (type === 4) {
           setBossState('elenaPunchWind');
           b.face = -1;
           spawnComic('РУКА!', b.x - 70, GROUND - 300, 22, '#ff8b71');
+          Sound.sfx('telegraph');
+        } else {
+          setBossState('elenaTeethWind');
+          b.face = -1;
+          spawnComic('ЗУБЫ ВЫПАДАЮТ!', W / 2, 150, 22, PINK_BRIGHT);
           Sound.sfx('telegraph');
         }
       }
@@ -15607,6 +15799,15 @@
       const p = clamp(b.timer / 0.38, 0, 1);
       b.elenaPunchDist = lerp(530, 0, easeInOutQuad(p));
       if (p >= 1) elenaToIdle(1.0 * difficultyConfig().wait);
+    } else if (b.state === 'elenaTeethWind') {
+      if (b.timer >= 0.78) {
+        spawnElenaTeeth();
+        setBossState('elenaTeethRecover');
+        Sound.sfx('roar');
+        game.shake = Math.max(game.shake, 5);
+      }
+    } else if (b.state === 'elenaTeethRecover') {
+      if (b.timer >= 1.15) elenaToIdle(1.05 * difficultyConfig().wait);
     }
   }
 
@@ -15672,12 +15873,12 @@
     ctx.save();
     ctx.rotate(s.spin * 0.35);
     const sea = ctx.createRadialGradient(-8, -9, 4, 0, 0, s.r);
-    sea.addColorStop(0, '#8fd4e8');
-    sea.addColorStop(1, '#3d87ad');
+    sea.addColorStop(0, s.parryable ? '#ffd3e4' : '#8fd4e8');
+    sea.addColorStop(1, s.parryable ? '#e0649b' : '#3d87ad');
     circle(ctx, 0, 0, s.r, sea, INK, 3.4);
     // континенты
-    ctx.fillStyle = '#7bbf6a';
-    ctx.strokeStyle = 'rgba(45, 79, 42, 0.7)';
+    ctx.fillStyle = s.parryable ? '#ffa8ca' : '#7bbf6a';
+    ctx.strokeStyle = s.parryable ? 'rgba(139, 40, 79, 0.7)' : 'rgba(45, 79, 42, 0.7)';
     ctx.lineWidth = 1.4;
     const blobs = [
       [-10, -11, 9, 6, -0.4],
@@ -15772,6 +15973,63 @@
     ctx.lineTo(-20, -8);
     ctx.moveTo(13, -18);
     ctx.lineTo(20, -8);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawElenaTooth(s) {
+    const running = s.mode === 'run';
+    const airborne = running && s.vy < -40;
+    const step = airborne ? 7 : Math.sin(s.t * 22) * 3;
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(Math.sin(s.t * 11) * 0.12 + (s.dir || -1) * 0.07);
+    // лапки
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-5, 3);
+    ctx.lineTo(-6 - step, 11);
+    ctx.moveTo(5, 3);
+    ctx.lineTo(6 + step, 11);
+    ctx.stroke();
+    // тело зуба с двумя корнями
+    ctx.beginPath();
+    ctx.moveTo(-11, -12);
+    ctx.quadraticCurveTo(-12, -21, 0, -21);
+    ctx.quadraticCurveTo(12, -21, 11, -12);
+    ctx.quadraticCurveTo(10, -2, 7, 6);
+    ctx.lineTo(4, -2);
+    ctx.lineTo(0, 7);
+    ctx.lineTo(-4, -2);
+    ctx.lineTo(-7, 6);
+    ctx.quadraticCurveTo(-10, -2, -11, -12);
+    ctx.closePath();
+    fillStroke(ctx, '#fff8e8', '#7a5a45', 2.6);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.beginPath();
+    ctx.ellipse(-4, -14, 4, 2.6, -0.3, 0, TAU);
+    ctx.fill();
+    // злые глазки и брови
+    ctx.fillStyle = INK;
+    ctx.beginPath();
+    ctx.arc(-4, -9, 1.8, 0, TAU);
+    ctx.arc(4, -9, 1.8, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-8, -14);
+    ctx.lineTo(-3, -12);
+    ctx.moveTo(8, -14);
+    ctx.lineTo(3, -12);
+    ctx.stroke();
+    // рот
+    ctx.strokeStyle = '#8e2f2b';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(0, -3, 4, 0.2, Math.PI - 0.2);
     ctx.stroke();
     ctx.restore();
   }
@@ -15970,7 +16228,11 @@
     g.moveTo(-3, headY + 4);
     g.quadraticCurveTo(-6, headY + 12, 1, headY + 13);
     g.stroke();
-    const mouthOpen = boss.state === 'elenaBreath' || boss.state === 'elenaBreathWind';
+    const mouthOpen =
+      boss.state === 'elenaBreath' ||
+      boss.state === 'elenaBreathWind' ||
+      boss.state === 'elenaTeethWind' ||
+      boss.state === 'elenaTeethRecover';
     g.fillStyle = '#8e2f2b';
     if (mouthOpen) {
       g.beginPath();
@@ -16201,7 +16463,7 @@
       g.lineWidth = 26;
       g.beginPath();
       g.moveTo(-38, torsoTop + 52);
-      g.lineTo(-88 - p, GROUND - 120 - (torsoTop + 52) + (torsoTop + 52));
+      g.lineTo(-88 - p, -120);
       g.stroke();
       ellipsePath(g, -104 - p, -118, 34, 28);
       fillStroke(g, SKIN, INK, 3.4);

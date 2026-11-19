@@ -1,4 +1,4 @@
-const CACHE = 'letunov-town-v8';
+const CACHE = 'letunov-town-v9';
 const FILES = [
   './',
   './index.html',

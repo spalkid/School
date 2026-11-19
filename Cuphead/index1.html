@@ -80,21 +80,21 @@
           <div class="controls-grid desktop-hints">
             <div><span class="keys"><kbd data-bind="left">A</kbd><kbd data-bind="right">D</kbd></span><span class="ctrl-label">движение</span></div>
             <div><span class="keys"><kbd data-bind="aimUp">↑</kbd></span><span class="ctrl-label">прицел вверх / по диагонали</span></div>
-            <div><span class="keys"><kbd data-bind="crouch">S</kbd></span><span class="ctrl-label">присед · прицел вниз</span></div>
+            <div><span class="keys"><kbd data-bind="crouch">S</kbd></span><span class="ctrl-label">присед · спрыгнуть с облака (с прыжком)</span></div>
             <div><span class="keys"><kbd data-bind="jump">ПРОБЕЛ</kbd></span><span class="ctrl-label">прыжок / пари</span></div>
             <div><span class="keys"><kbd data-bind="dash">SHIFT</kbd></span><span class="ctrl-label">рывок</span></div>
             <div><span class="keys"><kbd data-bind="lock">C</kbd></span><span class="ctrl-label">замок: стоять, целиться и стрелять</span></div>
             <div><span class="keys"><kbd data-bind="super">E</kbd></span><span class="ctrl-label">супер по кнопке</span></div>
           </div>
           <div class="controls-grid touch-hints">
-            <div><span class="keys"><kbd>◉</kbd></span><span class="ctrl-label">джойстик: ходьба, прицел вверх/вниз/по диагонали, присед</span></div>
+            <div><span class="keys"><kbd>◉</kbd></span><span class="ctrl-label">джойстик: ходьба, прицел вверх и по диагонали, присед</span></div>
             <div><span class="keys"><kbd>↑</kbd></span><span class="ctrl-label">прыжок и пари</span></div>
             <div><span class="keys"><kbd>»</kbd></span><span class="ctrl-label">рывок</span></div>
             <div><span class="keys"><kbd>🔒</kbd></span><span class="ctrl-label">замок: не двигаться, только целиться и стрелять</span></div>
             <div><span class="keys"><kbd>★</kbd></span><span class="ctrl-label">супер: 1 звезда — слабый, 5 — мощный</span></div>
             <div><span class="keys"><kbd id="touchShootKey">∞</kbd></span><span id="touchShootHint" class="ctrl-label">стрельба — сама</span></div>
           </div>
-          <p class="controls-tip">Джойстик целится во все стороны: вверх, вниз и по диагонали, а ходьба влево-вправо работает всегда. Розовые атаки парируй без перезарядки: прыгни и нажми прыжок ещё раз. На верхнем или среднем облаке Егора присед спускает на облако ниже, а нижнее облако держит всегда. Лепестки цветов падают вниз и бьют — не стой под ними. Супер запускается только кнопкой: за 1 звезду он слабее, за 5 — намного мощнее.</p>
+          <p class="controls-tip">Джойстик целится горизонтально, вверх и по диагонали — вниз оружие не опускается, а ходьба влево-вправо работает всегда. Розовые атаки парируй вплотную к предмету без перезарядки: прыгни и нажми прыжок ещё раз. С облака Егора можно спрыгнуть только приседом и прыжком сразу, а нижнее облако держит всегда. Лепестки цветов падают вниз и бьют — не стой под ними. Супер запускается только кнопкой: за 1 звезду он слабее, за 5 — намного мощнее. Во время супера герой продолжает стрелять.</p>
         </div>
 
         <button id="startButton" class="btn btn-primary" type="button">НА КАРТУ ГОРОДКА</button>
@@ -107,11 +107,11 @@
       <section id="inventoryPanel" class="panel inventory-panel" hidden>
         <div class="poster-kicker">Снаряжение бойца</div>
         <h2 class="panel-title">ИНВЕНТАРЬ</h2>
-        <p class="panel-copy">Три слота: оружие, бафф и перк. Всё купленное в магазине экипируется автоматически.</p>
+        <p class="panel-copy">Купленные предметы попадают в инвентарь. Нажми на слот атаки или перка, чтобы экипировать или снять его. Автонаводка — тоже модификатор атаки.</p>
         <div class="inventory-grid">
           <article id="invWeapon" class="inventory-slot" style="--slot-color:#6d63a9">
             <div class="inventory-slot-icon">✦</div>
-            <div class="inventory-slot-tag">СЛОТ 1 · ОРУЖИЕ</div>
+            <div class="inventory-slot-tag">СЛОТ 1 · АТАКА</div>
             <div class="inventory-slot-state">СЛОТ ПУСТ</div>
             <h3 class="inventory-slot-name">НЕТ ОРУЖИЯ</h3>
             <p class="inventory-slot-sub">Купи модификатор в магазине</p>
@@ -169,24 +169,27 @@
           <article class="shop-item">
             <div class="shop-icon">☁</div>
             <h3>ДЫМОВАЯ ЗАВЕСА</h3>
-            <p>Во время рывка герой исчезает в дыму, появляется в конце рывка и не получает урон, пока его нет.</p>
+            <p>Во время рывка герой исчезает в дыму, появляется в конце рывка и не получает урон, пока его нет. После покупки экипируй перк в инвентаре.</p>
             <button id="buySmokeButton" class="btn btn-primary" type="button">2 МОНЕТЫ</button>
           </article>
           <article class="shop-item">
             <div class="shop-icon aim-icon">✦</div>
             <h3>АВТОНАВОДКА</h3>
-            <p>Снаряды сами летят в босса даже вверх и по диагонали. Урон снижен в 1.3 раза.</p>
+            <p>Модификатор атаки: снаряды сами летят в босса даже вверх и по диагонали, но урон снижен в 1.3 раза. После покупки экипируй в слоте атаки.</p>
             <button id="buyAimButton" class="btn btn-primary" type="button">2 МОНЕТЫ</button>
           </article>
           <article class="shop-item">
             <div class="shop-icon">✹</div>
             <h3>ЩЕЛКУНЧИК</h3>
-            <p>Красный снаряд с обычным уроном. Мимо цели — из него вылетает маленькая зелёная самонаводка. С одной картой ставит красную турель.</p>
+            <p>Модификатор атаки: красный снаряд летит прямо, через пару метров становится полунаводящимся. С одной картой ставит красную турель. После покупки экипируй в слоте атаки.</p>
             <button id="buyNutcrackerButton" class="btn btn-primary" type="button">3 МОНЕТЫ</button>
           </article>
         </div>
         <p id="shopNotice" class="shop-notice" aria-live="polite"></p>
-        <button id="closeShopButton" class="btn btn-ghost" type="button">НА КАРТУ</button>
+        <div class="btn-row">
+          <button id="openShopInventoryButton" class="btn btn-secondary" type="button">ИНВЕНТАРЬ · ЭКИПИРОВАТЬ</button>
+          <button id="closeShopButton" class="btn btn-ghost" type="button">НА КАРТУ</button>
+        </div>
       </section>
     </div>
   </div>
